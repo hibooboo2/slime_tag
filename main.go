@@ -97,7 +97,13 @@ func (sprite *AnimatedSprite) GetCurrentSprite(frameCount int, movementAngle flo
 		direction = 1
 	}
 
-	return sprite.frame == sprite.width, sprite.image.SubImage(image.Rect(x, direction*sprite.frameHeight, x+sprite.frameWidth, direction*sprite.frameHeight+sprite.frameHeight)).(*ebiten.Image)
+	isFinished := sprite.frame == sprite.width
+
+	if sprite.frame >= sprite.width {
+		sprite.frame = 0
+	}
+
+	return isFinished, sprite.image.SubImage(image.Rect(x, direction*sprite.frameHeight, x+sprite.frameWidth, direction*sprite.frameHeight+sprite.frameHeight)).(*ebiten.Image)
 }
 
 type Bullet struct {
@@ -108,9 +114,10 @@ type Bullet struct {
 }
 
 type Enemy struct {
-	x, y    float64
-	sprites *SpritePack
-	hp      int
+	x, y      float64
+	sprites   *SpritePack
+	hp        int
+	attacking time.Time
 }
 
 func NewEnemy(slimeName string, startX, startY float64) *Enemy {
@@ -125,7 +132,7 @@ func NewEnemy(slimeName string, startX, startY float64) *Enemy {
 }
 
 func (e *Enemy) RandomMovement() {
-	ticker := time.NewTicker(500 * time.Millisecond) // Change direction every 500ms
+	ticker := time.NewTicker(1000 * time.Millisecond) // Change direction every 500ms
 	defer ticker.Stop()
 
 	var dx, dy float64
@@ -136,6 +143,9 @@ func (e *Enemy) RandomMovement() {
 			angle := rand.Float64() * 2 * math.Pi
 			dx = math.Cos(angle)
 			dy = math.Sin(angle)
+			if rand.Intn(100) > 50 {
+				e.attacking = time.Now().Add(time.Second * 2)
+			}
 		default:
 			// Move the enemy
 			e.x += dx * 1 // Adjust speed as needed
@@ -342,6 +352,32 @@ func (g *Game) checkBulletCollisions() {
 	g.bullets = remainingBullets
 }
 
+func (g *Game) checkEnemyCollisions() {
+	for _, enemy := range g.enemies {
+		if enemy.attacking.After(time.Now()) {
+			// Define the player's bounding rectangle
+			playerRect := image.Rect(
+				int(g.player.x)+16, int(g.player.y)+16,
+				int(g.player.x)+g.player.spritePack.idle.frameWidth-16,
+				int(g.player.y)+g.player.spritePack.idle.frameHeight-16,
+			)
+
+			// Define the enemy's bounding rectangle
+			enemyRect := image.Rect(
+				int(enemy.x)+16, int(enemy.y)+16,
+				int(enemy.x)+enemy.sprites.idle.frameWidth-16,
+				int(enemy.y)+enemy.sprites.idle.frameHeight-16,
+			)
+
+			// Check for collision
+			if playerRect.Overlaps(enemyRect) {
+				// Damage the player
+				g.player.hp -= 10
+			}
+		}
+	}
+}
+
 func (g *Game) Update() error {
 	if g.exit {
 		return fmt.Errorf("exit")
@@ -390,8 +426,9 @@ func (g *Game) Update() error {
 		g.player.attacking = ebiten.IsKeyPressed(ebiten.KeySpace)
 
 		// Store the movement angle in the player struct
-		g.player.movementAngle = movementAngle
-
+		if dx != 0 || dy != 0 {
+			g.player.movementAngle = movementAngle
+		}
 		// Handle shooting action every 10th frame
 		if g.frameCount%10 == 0 && ebiten.IsKeyPressed(ebiten.KeyE) {
 			bullet := &Bullet{
@@ -435,6 +472,11 @@ func (g *Game) Update() error {
 
 	// Check for bullet collisions with enemies
 	g.checkBulletCollisions()
+
+	if g.frameCount%10 == 0 {
+		// Check for enemy collisions with the player
+		g.checkEnemyCollisions()
+	}
 	// Increment the frame counter
 	g.frameCount++
 
@@ -483,6 +525,19 @@ func drawArc(screen *ebiten.Image, x, y, radius, startAngle, endAngle float32, c
 	screen.DrawTriangles(vertices, indices, src, op)
 }
 
+func drawHPBar(screen *ebiten.Image, x, y float64, hp, maxHP int, hpColor color.Color) {
+	barWidth := 50.0
+	barHeight := 5.0
+	hpRatio := float64(hp) / float64(maxHP)
+	hpBarWidth := barWidth * hpRatio
+
+	// Draw the background of the HP bar (gray)
+	vector.DrawFilledRect(screen, float32(x), float32(y), float32(barWidth), float32(barHeight), color.RGBA{128, 128, 128, 255}, true)
+
+	// Draw the current HP (green)
+	vector.DrawFilledRect(screen, float32(x), float32(y), float32(hpBarWidth), float32(barHeight), hpColor, true)
+}
+
 func (g *Game) drawGameView(screen *ebiten.Image) {
 	// Game drawing logic goes here
 	ebitenutil.DebugPrint(screen, "Game is running...")
@@ -495,9 +550,12 @@ func (g *Game) drawGameView(screen *ebiten.Image) {
 	op := &ebiten.DrawImageOptions{}
 	op.GeoM.Translate(g.player.x, g.player.y)
 
+	// Draw the player's HP bar above the player
+	drawHPBar(screen, g.player.x, g.player.y-10, g.player.hp, 100, color.RGBA{0, 255, 0, 255})
+
 	sprite := g.player.spritePack.idle
 	switch {
-	case g.player.hp == 0:
+	case g.player.hp <= 0:
 		sprite = g.player.spritePack.death
 	case g.player.hp <= 50:
 		sprite = g.player.spritePack.hurt
@@ -509,8 +567,9 @@ func (g *Game) drawGameView(screen *ebiten.Image) {
 
 	isDone, currentPlayerSprite := sprite.GetCurrentSprite(g.frameCount, g.player.movementAngle)
 	defer screen.DrawImage(currentPlayerSprite, op)
-	if g.player.hp == 0 && isDone {
+	if g.player.hp <= 0 && isDone {
 		g.inMenu = true
+		g.player.hp = 100
 	}
 
 	// Draw enemies
@@ -519,6 +578,9 @@ func (g *Game) drawGameView(screen *ebiten.Image) {
 		op := &ebiten.DrawImageOptions{}
 		op.GeoM.Translate(enemy.x, enemy.y)
 
+		// Draw the enemy's HP bar above the enemy
+		drawHPBar(screen, enemy.x, enemy.y-10, enemy.hp, 100, color.RGBA{255, 0, 0, 255})
+
 		// Use SubImage to get the desired part of the sprite
 		var sprite *AnimatedSprite
 		switch {
@@ -526,6 +588,8 @@ func (g *Game) drawGameView(screen *ebiten.Image) {
 			sprite = enemy.sprites.death
 		case enemy.hp <= 50:
 			sprite = enemy.sprites.hurt
+		case enemy.attacking.After(time.Now()):
+			sprite = enemy.sprites.attack
 		default:
 			sprite = enemy.sprites.idle
 		}
@@ -613,7 +677,7 @@ func main() {
 	if err != nil {
 		log.Fatal(err) // Log and exit if there's an error
 	}
-	p.hp = 0
+	p.hp = 100
 
 	game := &Game{
 		menuOptions: []string{"Start Game", "Settings", "Exit"},
