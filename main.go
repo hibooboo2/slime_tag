@@ -110,6 +110,7 @@ type Bullet struct {
 type Enemy struct {
 	x, y    float64
 	sprites *SpritePack
+	hp      int
 }
 
 func NewEnemy(slimeName string, startX, startY float64) *Enemy {
@@ -117,11 +118,45 @@ func NewEnemy(slimeName string, startX, startY float64) *Enemy {
 		x:       startX,
 		y:       startY,
 		sprites: NewSpritePack(slimeName),
+		hp:      100,
 	}
 	go func() {
+		rand.Seed(time.Now().UnixNano())
+		ticker := time.NewTicker(500 * time.Millisecond) // Change direction every 500ms
+		defer ticker.Stop()
+
+		var dx, dy float64
 		for {
-			e.x += 2
-			time.Sleep(10 * time.Millisecond)
+			select {
+			case <-ticker.C:
+				// Randomly change direction
+				angle := rand.Float64() * 2 * math.Pi
+				dx = math.Cos(angle)
+				dy = math.Sin(angle)
+			default:
+				// Move the enemy
+				e.x += dx * 1 // Adjust speed as needed
+				e.y += dy * 1 // Adjust speed as needed
+
+				// Ensure the enemy stays within bounds
+				if e.x < 0 {
+					e.x = 0
+					dx = -dx
+				} else if e.x > 1920 {
+					e.x = 1920
+					dx = -dx
+				}
+
+				if e.y < 0 {
+					e.y = 0
+					dy = -dy
+				} else if e.y > 1080 {
+					e.y = 1080
+					dy = -dy
+				}
+
+				time.Sleep(16 * time.Millisecond) // Roughly 60 updates per second
+			}
 		}
 	}()
 	return e
@@ -529,7 +564,7 @@ func main() {
 	if err != nil {
 		log.Fatal(err) // Log and exit if there's an error
 	}
-	p.hp = 100
+	p.hp = 0
 
 	game := &Game{
 		menuOptions: []string{"Start Game", "Settings", "Exit"},
