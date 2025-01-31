@@ -6,6 +6,7 @@ import (
 	"image/color"
 	"log"
 	"math"
+	"math/rand"
 	"slices"
 	"time"
 
@@ -23,44 +24,65 @@ type AnimatedSprite struct {
 	frameHeight int
 }
 
+type SpritePack struct {
+	attack *AnimatedSprite
+	death  *AnimatedSprite
+	hurt   *AnimatedSprite
+	idle   *AnimatedSprite
+	run    *AnimatedSprite
+	walk   *AnimatedSprite
+}
+
 type Player struct {
 	playerType    string
 	x, y          float64
-	swinging      bool
-	swingAngle    float32
+	attacking     bool
+	running       bool
 	movementAngle float32
-	sprite        *AnimatedSprite
+	spritePack    *SpritePack
+	hp            int
 }
 
-func NewPlayer(playerType string, startX, startY float64, fileName string, spriteWidth int) (*Player, error) {
+func NewSprite(fileName string, width int) *AnimatedSprite {
 	spriteImage, _, err := ebitenutil.NewImageFromFileSystem(slimes, fileName) // Load the sprite image
 	if err != nil {
-		return nil, err // Return error if the image cannot be loaded
+		panic(err)
 	}
-	animatedSprite := AnimatedSprite{
+
+	return &AnimatedSprite{
 		image:       spriteImage,
-		width:       spriteWidth,
+		width:       width,
 		frameWidth:  64,
 		frameHeight: 64,
 	}
+}
+
+func NewSpritePack(slimeName string) *SpritePack {
+	sp := &SpritePack{}
+
+	sp.attack = NewSprite(fmt.Sprintf("slimes/PNG/%[1]s/Attack/%[1]s_Attack_full.png", slimeName), 10)
+	sp.death = NewSprite(fmt.Sprintf("slimes/PNG/%[1]s/Death/%[1]s_Death_full.png", slimeName), 10)
+	sp.hurt = NewSprite(fmt.Sprintf("slimes/PNG/%[1]s/Hurt/%[1]s_Hurt_full.png", slimeName), 5)
+	sp.idle = NewSprite(fmt.Sprintf("slimes/PNG/%[1]s/Idle/%[1]s_Idle_full.png", slimeName), 6)
+	sp.run = NewSprite(fmt.Sprintf("slimes/PNG/%[1]s/Run/%[1]s_Run_full.png", slimeName), 8)
+	sp.walk = NewSprite(fmt.Sprintf("slimes/PNG/%[1]s/Walk/%[1]s_Walk_full.png", slimeName), 8)
+
+	return sp
+}
+
+func NewPlayer(playerType string, spritePack *SpritePack) (*Player, error) {
 	return &Player{
 		playerType: playerType,
-		x:          startX,
-		y:          startY,
-		sprite:     &animatedSprite,
+		spritePack: spritePack,
 	}, nil
 }
 
-func (sprite *AnimatedSprite) GetCurrentSprite(frameCount int, movementAngle float32) *ebiten.Image {
-	x := 0
-
+func (sprite *AnimatedSprite) GetCurrentSprite(frameCount int, movementAngle float32) (int, *ebiten.Image) {
 	if frameCount%5 == 0 {
 		sprite.frame++
 	}
 
-	if frameCount > 0 {
-		x = (sprite.frame % sprite.width) * sprite.frameWidth
-	}
+	x := (sprite.frame % sprite.width) * sprite.frameWidth
 
 	// Determine direction based on movementAngle
 	var direction int
@@ -75,7 +97,7 @@ func (sprite *AnimatedSprite) GetCurrentSprite(frameCount int, movementAngle flo
 		direction = 1
 	}
 
-	return sprite.image.SubImage(image.Rect(x, direction*sprite.frameHeight, x+sprite.frameWidth, direction*sprite.frameHeight+sprite.frameHeight)).(*ebiten.Image)
+	return (x + 1) % sprite.width, sprite.image.SubImage(image.Rect(x, direction*sprite.frameHeight, x+sprite.frameWidth, direction*sprite.frameHeight+sprite.frameHeight)).(*ebiten.Image)
 }
 
 type Bullet struct {
@@ -86,20 +108,23 @@ type Bullet struct {
 }
 
 type Enemy struct {
-	x, y   float64
-	sprite *ebiten.Image
+	x, y    float64
+	sprites *SpritePack
 }
 
-func NewEnemy(fileName string, startX, startY float64) (*Enemy, error) {
-	sprite, _, err := ebitenutil.NewImageFromFile(fileName) // Load the sprite image
-	if err != nil {
-		return nil, err // Return error if the image cannot be loaded
+func NewEnemy(slimeName string, startX, startY float64) *Enemy {
+	e := &Enemy{
+		x:       startX,
+		y:       startY,
+		sprites: NewSpritePack(slimeName),
 	}
-	return &Enemy{
-		x:      startX,
-		y:      startY,
-		sprite: sprite,
-	}, nil
+	go func() {
+		for {
+			e.x += 2
+			time.Sleep(10 * time.Millisecond)
+		}
+	}()
+	return e
 }
 
 type Game struct {
@@ -235,11 +260,7 @@ func (g *Game) handleGamepadInput() bool {
 			movementAngle := float32(math.Atan2(float64(dy), float64(dx)) * (180 / math.Pi))
 			g.player.movementAngle = movementAngle
 
-			// Handle swinging action
-			if ebiten.IsGamepadButtonPressed(id, ebiten.GamepadButton2) && !g.player.swinging { // X button
-				g.player.swinging = true
-				g.player.swingAngle = 0
-			}
+			g.player.attacking = ebiten.IsGamepadButtonPressed(id, ebiten.GamepadButton2) // X button
 
 			// Handle shooting action every 10th frame
 			if g.frameCount%10 == 0 && ebiten.IsGamepadButtonPressed(id, ebiten.GamepadButton3) { // Y button
@@ -267,6 +288,7 @@ func (g *Game) Update() error {
 	if g.inMenu {
 
 	} else if !isConnected {
+		g.player.running = ebiten.IsKeyPressed(ebiten.KeyShift)
 		// Calculate movement vector
 		var dx, dy float32
 		if ebiten.IsKeyPressed(ebiten.KeyW) {
@@ -292,15 +314,16 @@ func (g *Game) Update() error {
 		// Update player position
 		g.player.x += float64(dx) // Convert dx to float64
 		g.player.y += float64(dy) // Convert dy to float64
+		if g.player.running {
+			g.player.x += float64(dx)
+			g.player.y += float64(dy)
+		}
 
 		// Calculate movement angle
 		movementAngle := float32(math.Atan2(float64(dy), float64(dx)) * (180 / math.Pi))
 
 		// Handle swinging action
-		if ebiten.IsKeyPressed(ebiten.KeySpace) && !g.player.swinging {
-			g.player.swinging = true
-			g.player.swingAngle = 0
-		}
+		g.player.attacking = ebiten.IsKeyPressed(ebiten.KeySpace)
 
 		// Store the movement angle in the player struct
 		g.player.movementAngle = movementAngle
@@ -330,13 +353,6 @@ func (g *Game) Update() error {
 		g.player.y = 1080 // Wrap to the bottom edge
 	} else if g.player.y >= 1080 {
 		g.player.y = 0 // Wrap to the top edge
-	}
-
-	if g.player.swinging {
-		g.player.swingAngle += 20 // Increment the swing angle three times faster
-		if g.player.swingAngle >= 180 {
-			g.player.swinging = false // End the swing after 180 degrees
-		}
 	}
 
 	// Update bullet positions and remove old bullets
@@ -412,28 +428,35 @@ func (g *Game) drawGameView(screen *ebiten.Image) {
 	// Draw the player sprite
 	op := &ebiten.DrawImageOptions{}
 	op.GeoM.Translate(g.player.x, g.player.y)
-	defer screen.DrawImage(g.player.sprite.GetCurrentSprite(g.frameCount, g.player.movementAngle), op)
+
+	sprite := g.player.spritePack.idle
+	switch {
+	case g.player.hp == 0:
+		sprite = g.player.spritePack.death
+	case g.player.hp <= 50:
+		sprite = g.player.spritePack.hurt
+	case g.player.attacking:
+		sprite = g.player.spritePack.attack
+	case g.player.running:
+		sprite = g.player.spritePack.run
+	}
+
+	spriteFrame, currentPlayerSprite := sprite.GetCurrentSprite(g.frameCount, g.player.movementAngle)
+	defer screen.DrawImage(currentPlayerSprite, op)
+	if g.player.hp == 0 && spriteFrame == 0 {
+		g.inMenu = true
+	}
 
 	// Draw enemies
 	for _, enemy := range g.enemies {
 		op := &ebiten.DrawImageOptions{}
 		op.GeoM.Translate(enemy.x, enemy.y)
 
-		// Define the rectangle area you want to draw from the sprite
-		subImageRect := image.Rect(0, 0, 50, 50) // Example: top-left 50x50 area
-
 		// Use SubImage to get the desired part of the sprite
-		subImage := enemy.sprite.SubImage(subImageRect).(*ebiten.Image)
+		_, subImage := enemy.sprites.idle.GetCurrentSprite(g.frameCount, 0)
 
 		// Draw the sub-image
 		screen.DrawImage(subImage, op)
-	}
-
-	// Draw the swinging arc
-	if g.player.swinging {
-		startAngle := g.player.movementAngle - 90
-		endAngle := startAngle + g.player.swingAngle
-		drawArc(screen, float32(g.player.x), float32(g.player.y), 15, startAngle, endAngle, color.RGBA{255, 255, 0, 255}) // Convert x and y to float32
 	}
 
 	// Draw bullets
@@ -502,10 +525,12 @@ func (g *Game) Layout(outsideWidth, outsideHeight int) (int, int) {
 func main() {
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
 
-	p, err := NewPlayer("circle", 0, 0, "slimes/PNG/Slime1/Idle/Slime1_Idle_full.png", 6)
+	p, err := NewPlayer("circle", NewSpritePack("Slime1"))
 	if err != nil {
 		log.Fatal(err) // Log and exit if there's an error
 	}
+	p.hp = 100
+
 	game := &Game{
 		menuOptions: []string{"Start Game", "Settings", "Exit"},
 		selected:    0,
@@ -517,11 +542,14 @@ func main() {
 	}
 
 	// Example of adding an enemy
-	enemy, err := NewEnemy("slimes/PNG/Slime2/Idle/Slime2_Idle_full.png", 300, 200)
-	if err != nil {
-		log.Fatal(err)
+	enemyTypes := []string{"Slime2", "Slime3"}
+
+	for i := range 20 {
+		// Generate random positions for the enemies
+		x := rand.Intn(1920 / 2) // Assuming the screen width is 1920
+		y := rand.Intn(1080 / 2) // Assuming the screen height is 1080
+		game.enemies = append(game.enemies, NewEnemy(enemyTypes[(i%len(enemyTypes))], float64(x), float64(y)))
 	}
-	game.enemies = append(game.enemies, enemy)
 
 	go game.handleKeys()
 	// Example of adding a debug log
