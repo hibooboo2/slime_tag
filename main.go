@@ -77,7 +77,7 @@ func NewPlayer(playerType string, spritePack *SpritePack) (*Player, error) {
 	}, nil
 }
 
-func (sprite *AnimatedSprite) GetCurrentSprite(frameCount int, movementAngle float32) (int, *ebiten.Image) {
+func (sprite *AnimatedSprite) GetCurrentSprite(frameCount int, movementAngle float32) (bool, *ebiten.Image) {
 	if frameCount%5 == 0 {
 		sprite.frame++
 	}
@@ -97,7 +97,7 @@ func (sprite *AnimatedSprite) GetCurrentSprite(frameCount int, movementAngle flo
 		direction = 1
 	}
 
-	return (x + 1) % sprite.width, sprite.image.SubImage(image.Rect(x, direction*sprite.frameHeight, x+sprite.frameWidth, direction*sprite.frameHeight+sprite.frameHeight)).(*ebiten.Image)
+	return sprite.frame == sprite.width, sprite.image.SubImage(image.Rect(x, direction*sprite.frameHeight, x+sprite.frameWidth, direction*sprite.frameHeight+sprite.frameHeight)).(*ebiten.Image)
 }
 
 type Bullet struct {
@@ -120,46 +120,47 @@ func NewEnemy(slimeName string, startX, startY float64) *Enemy {
 		sprites: NewSpritePack(slimeName),
 		hp:      100,
 	}
-	go func() {
-		rand.Seed(time.Now().UnixNano())
-		ticker := time.NewTicker(500 * time.Millisecond) // Change direction every 500ms
-		defer ticker.Stop()
-
-		var dx, dy float64
-		for {
-			select {
-			case <-ticker.C:
-				// Randomly change direction
-				angle := rand.Float64() * 2 * math.Pi
-				dx = math.Cos(angle)
-				dy = math.Sin(angle)
-			default:
-				// Move the enemy
-				e.x += dx * 1 // Adjust speed as needed
-				e.y += dy * 1 // Adjust speed as needed
-
-				// Ensure the enemy stays within bounds
-				if e.x < 0 {
-					e.x = 0
-					dx = -dx
-				} else if e.x > 1920 {
-					e.x = 1920
-					dx = -dx
-				}
-
-				if e.y < 0 {
-					e.y = 0
-					dy = -dy
-				} else if e.y > 1080 {
-					e.y = 1080
-					dy = -dy
-				}
-
-				time.Sleep(16 * time.Millisecond) // Roughly 60 updates per second
-			}
-		}
-	}()
+	go e.RandomMovement()
 	return e
+}
+
+func (e *Enemy) RandomMovement() {
+	ticker := time.NewTicker(500 * time.Millisecond) // Change direction every 500ms
+	defer ticker.Stop()
+
+	var dx, dy float64
+	for {
+		select {
+		case <-ticker.C:
+			// Randomly change direction
+			angle := rand.Float64() * 2 * math.Pi
+			dx = math.Cos(angle)
+			dy = math.Sin(angle)
+		default:
+			// Move the enemy
+			e.x += dx * 1 // Adjust speed as needed
+			e.y += dy * 1 // Adjust speed as needed
+
+			// Ensure the enemy stays within bounds
+			if e.x < 0 {
+				e.x = 0
+				dx = -dx
+			} else if e.x > 1920 {
+				e.x = 1920
+				dx = -dx
+			}
+
+			if e.y < 0 {
+				e.y = 0
+				dy = -dy
+			} else if e.y > 1080 {
+				e.y = 1080
+				dy = -dy
+			}
+
+			time.Sleep(16 * time.Millisecond) // Roughly 60 updates per second
+		}
+	}
 }
 
 type Game struct {
@@ -300,8 +301,8 @@ func (g *Game) handleGamepadInput() bool {
 			// Handle shooting action every 10th frame
 			if g.frameCount%10 == 0 && ebiten.IsGamepadButtonPressed(id, ebiten.GamepadButton3) { // Y button
 				bullet := &Bullet{
-					x:            float32(g.player.x), // Convert x to float32
-					y:            float32(g.player.y), // Convert y to float32
+					x:            float32(g.player.x) + 32, // Convert x to float32
+					y:            float32(g.player.y) + 32, // Convert y to float32
 					angle:        g.player.movementAngle,
 					speed:        5,
 					creationTime: time.Now(), // Initialize creationTime
@@ -311,6 +312,34 @@ func (g *Game) handleGamepadInput() bool {
 		}
 	}
 	return len(g.gamepads) > 0
+}
+
+func (g *Game) checkBulletCollisions() {
+	var remainingBullets []*Bullet
+	for _, bullet := range g.bullets {
+		collided := false
+		for _, enemy := range g.enemies {
+			// Define the enemy's bounding rectangle
+			enemyRect := image.Rect(
+				int(enemy.x)+16, int(enemy.y)+16,
+				int(enemy.x)+enemy.sprites.idle.frameWidth-16,
+				int(enemy.y)+enemy.sprites.idle.frameHeight-16,
+			)
+
+			// Check if the bullet is within the enemy's rectangle
+			if enemyRect.Min.X <= int(bullet.x) && int(bullet.x) <= enemyRect.Max.X &&
+				enemyRect.Min.Y <= int(bullet.y) && int(bullet.y) <= enemyRect.Max.Y {
+				// Collision detected
+				enemy.hp -= 10
+				collided = true
+				break
+			}
+		}
+		if !collided {
+			remainingBullets = append(remainingBullets, bullet)
+		}
+	}
+	g.bullets = remainingBullets
 }
 
 func (g *Game) Update() error {
@@ -366,8 +395,8 @@ func (g *Game) Update() error {
 		// Handle shooting action every 10th frame
 		if g.frameCount%10 == 0 && ebiten.IsKeyPressed(ebiten.KeyE) {
 			bullet := &Bullet{
-				x:            float32(g.player.x), // Convert x to float32
-				y:            float32(g.player.y), // Convert y to float32
+				x:            float32(g.player.x) + 32, // Convert x to float32
+				y:            float32(g.player.y) + 32, // Convert y to float32
 				angle:        g.player.movementAngle,
 				speed:        10,
 				creationTime: time.Now(), // Initialize creationTime
@@ -404,6 +433,8 @@ func (g *Game) Update() error {
 	}
 	g.bullets = activeBullets
 
+	// Check for bullet collisions with enemies
+	g.checkBulletCollisions()
 	// Increment the frame counter
 	g.frameCount++
 
@@ -476,23 +507,39 @@ func (g *Game) drawGameView(screen *ebiten.Image) {
 		sprite = g.player.spritePack.run
 	}
 
-	spriteFrame, currentPlayerSprite := sprite.GetCurrentSprite(g.frameCount, g.player.movementAngle)
+	isDone, currentPlayerSprite := sprite.GetCurrentSprite(g.frameCount, g.player.movementAngle)
 	defer screen.DrawImage(currentPlayerSprite, op)
-	if g.player.hp == 0 && spriteFrame == 0 {
+	if g.player.hp == 0 && isDone {
 		g.inMenu = true
 	}
 
 	// Draw enemies
+	newEnemies := []*Enemy{}
 	for _, enemy := range g.enemies {
 		op := &ebiten.DrawImageOptions{}
 		op.GeoM.Translate(enemy.x, enemy.y)
 
 		// Use SubImage to get the desired part of the sprite
-		_, subImage := enemy.sprites.idle.GetCurrentSprite(g.frameCount, 0)
+		var sprite *AnimatedSprite
+		switch {
+		case enemy.hp <= 0:
+			sprite = enemy.sprites.death
+		case enemy.hp <= 50:
+			sprite = enemy.sprites.hurt
+		default:
+			sprite = enemy.sprites.idle
+		}
+
+		//XXX Death animation is not working
+		isDone, subImage := sprite.GetCurrentSprite(g.frameCount, 0)
+		if !(enemy.hp <= 0 && isDone) {
+			newEnemies = append(newEnemies, enemy)
+		}
 
 		// Draw the sub-image
 		screen.DrawImage(subImage, op)
 	}
+	g.enemies = newEnemies
 
 	// Draw bullets
 	for _, bullet := range g.bullets {
@@ -558,6 +605,8 @@ func (g *Game) Layout(outsideWidth, outsideHeight int) (int, int) {
 }
 
 func main() {
+	rand.Seed(time.Now().UnixNano())
+
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
 
 	p, err := NewPlayer("circle", NewSpritePack("Slime1"))
