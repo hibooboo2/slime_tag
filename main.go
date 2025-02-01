@@ -108,7 +108,7 @@ func (sprite *AnimatedSprite) GetCurrentSprite(frameCount int, movementAngle flo
 
 	isFinished := sprite.frame == sprite.width
 
-	if frameCount-sprite.lastGameFrameCount != frameCount-1 {
+	if sprite.lastGameFrameCount != frameCount-1 {
 		sprite.frame = 0
 	}
 
