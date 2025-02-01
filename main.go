@@ -114,8 +114,8 @@ func (sprite *AnimatedSprite) GetCurrentSprite(frameCount int, movementAngle flo
 
 	if sprite.frame >= sprite.width {
 		sprite.frame = 0
-		sprite.lastGameFrameCount = frameCount
 	}
+	sprite.lastGameFrameCount = frameCount
 
 	return isFinished, sprite.image.SubImage(image.Rect(x, direction*sprite.frameHeight, x+sprite.frameWidth, direction*sprite.frameHeight+sprite.frameHeight)).(*ebiten.Image)
 }
