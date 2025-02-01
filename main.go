@@ -371,7 +371,7 @@ func (g *Game) checkBulletCollisions() {
 			if enemyRect.Min.X <= int(bullet.x)+3 && int(bullet.x)-3 <= enemyRect.Max.X &&
 				enemyRect.Min.Y <= int(bullet.y)+3 && int(bullet.y)-3 <= enemyRect.Max.Y {
 				// Collision detected
-				enemy.hp -= 10
+				enemy.hp -= 20
 				if enemy.hp <= 0 {
 					g.enemiesKilled++ // Increment the enemies killed count
 				}
@@ -411,7 +411,7 @@ func (g *Game) checkEnemyCollisions() {
 			// Check for collision
 			if playerRect.Overlaps(enemyRect) {
 				// Damage the player
-				g.player.hp -= 20
+				g.player.hp -= 10
 			}
 		}
 	}
@@ -693,7 +693,6 @@ func (g *Game) drawSettings(screen *ebiten.Image) {
 }
 
 func (g *Game) drawGameOver(screen *ebiten.Image) {
-	screen.Fill(color.RGBA{0, 0, 0, 255}) // Black background
 	ebitenutil.DebugPrintAt(screen, "Game Over", 300, 150)
 	ebitenutil.DebugPrintAt(screen, fmt.Sprintf("Score: %d", g.enemiesKilled*100), 300, 200)
 	ebitenutil.DebugPrintAt(screen, "Press R to restart", 300, 250)
@@ -712,16 +711,17 @@ func (g *Game) Draw(screen *ebiten.Image) {
 		return
 	}
 
+	g.drawGameView(screen)
+
 	if g.gameOver {
 		g.drawGameOver(screen)
 		return
 	}
 
-	g.drawGameView(screen)
 }
 
 func (g *Game) Layout(outsideWidth, outsideHeight int) (int, int) {
-	return outsideWidth / 2, outsideHeight / 2
+	return 1920, 1080
 }
 
 func (g *Game) resetGame() {
@@ -731,7 +731,6 @@ func (g *Game) resetGame() {
 	for _, enemy := range g.enemies {
 		close(enemy.done)
 	}
-
 	g.enemies = []*Enemy{}
 
 	for i := range 20 {
@@ -754,7 +753,7 @@ func main() {
 	p.hp = 100
 
 	game := &Game{
-		menuOptions: []string{"Start Game", "Settings", "Exit"},
+		menuOptions: []string{"Start Game", "Settings", "Fun Stuff", "Exit"},
 		selected:    0,
 		inMenu:      false,
 		keys:        NewKeys(),
