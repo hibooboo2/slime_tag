@@ -121,7 +121,10 @@ type Enemy struct {
 	sprites   *SpritePack
 	hp        int
 	attacking time.Time
+	done      chan bool
 }
+
+var enemyTypes = []string{"Slime2", "Slime3"}
 
 func NewEnemy(slimeName string, startX, startY float64) *Enemy {
 	e := &Enemy{
@@ -129,9 +132,11 @@ func NewEnemy(slimeName string, startX, startY float64) *Enemy {
 		y:       startY,
 		sprites: NewSpritePack(slimeName),
 		hp:      100,
+		done:    make(chan bool),
 	}
 	go e.RandomMovement()
 	return e
+
 }
 
 func (e *Enemy) RandomMovement() {
@@ -141,6 +146,8 @@ func (e *Enemy) RandomMovement() {
 	var dx, dy float64
 	for {
 		select {
+		case <-e.done:
+			return
 		case <-ticker.C:
 			// Randomly change direction
 			angle := rand.Float64() * 2 * math.Pi
@@ -182,19 +189,21 @@ func (e *Enemy) RandomMovement() {
 }
 
 type Game struct {
-	menuOptions []string
-	selected    int
-	inMenu      bool
-	keys        *Keys
-	exit        bool
-	player      *Player
-	debugLogs   []string
-	lastLogTime time.Time
-	settings    bool
-	bullets     []*Bullet
-	frameCount  int // Add a frame counter
-	gamepads    []ebiten.GamepadID
-	enemies     []*Enemy // Add a slice to hold enemies
+	menuOptions   []string
+	selected      int
+	inMenu        bool
+	keys          *Keys
+	exit          bool
+	player        *Player
+	debugLogs     []string
+	lastLogTime   time.Time
+	settings      bool
+	bullets       []*Bullet
+	frameCount    int // Add a frame counter
+	gamepads      []ebiten.GamepadID
+	enemies       []*Enemy // Add a slice to hold enemies
+	enemiesKilled int      // Add a field to track the number of enemies killed
+	gameOver      bool     // Add a field to track if the game is over
 }
 
 type KeyEvent struct {
@@ -249,15 +258,23 @@ func (g *Game) handleKeys() {
 			switch g.menuOptions[g.selected] {
 			case "Start Game":
 				g.inMenu = false
+				if g.gameOver {
+					g.resetGame()
+				}
 			case "Exit":
 				g.exit = true
 			case "Settings":
 				g.inMenu = false
 				g.settings = true
 			}
+
 		case ebiten.KeyEscape:
 			g.settings = false
 			g.inMenu = true
+		case ebiten.KeyR:
+			if g.gameOver {
+				g.resetGame() // Restart the game if it's over
+			}
 		}
 	}
 }
@@ -355,6 +372,9 @@ func (g *Game) checkBulletCollisions() {
 				enemyRect.Min.Y <= int(bullet.y)+3 && int(bullet.y)-3 <= enemyRect.Max.Y {
 				// Collision detected
 				enemy.hp -= 10
+				if enemy.hp <= 0 {
+					g.enemiesKilled++ // Increment the enemies killed count
+				}
 				collided = true
 				break
 			}
@@ -407,6 +427,9 @@ func (g *Game) Update() error {
 	if g.inMenu {
 
 	} else if !isConnected {
+		if g.gameOver {
+			return nil // Stop updating the game if it's over
+		}
 		g.player.running = ebiten.IsKeyPressed(ebiten.KeyShift)
 
 		// Adjust the player's movement angle with A and D keys
@@ -489,6 +512,10 @@ func (g *Game) Update() error {
 	}
 	// Increment the frame counter
 	g.frameCount++
+
+	if g.player.hp <= 0 {
+		g.gameOver = true // Set game over state when player dies
+	}
 
 	return nil
 }
@@ -665,6 +692,13 @@ func (g *Game) drawSettings(screen *ebiten.Image) {
 	// Add more settings UI elements as needed
 }
 
+func (g *Game) drawGameOver(screen *ebiten.Image) {
+	screen.Fill(color.RGBA{0, 0, 0, 255}) // Black background
+	ebitenutil.DebugPrintAt(screen, "Game Over", 300, 150)
+	ebitenutil.DebugPrintAt(screen, fmt.Sprintf("Score: %d", g.enemiesKilled*100), 300, 200)
+	ebitenutil.DebugPrintAt(screen, "Press R to restart", 300, 250)
+}
+
 func (g *Game) Draw(screen *ebiten.Image) {
 	defer g.drawDebugLogs(screen)
 
@@ -678,11 +712,34 @@ func (g *Game) Draw(screen *ebiten.Image) {
 		return
 	}
 
+	if g.gameOver {
+		g.drawGameOver(screen)
+		return
+	}
+
 	g.drawGameView(screen)
 }
 
 func (g *Game) Layout(outsideWidth, outsideHeight int) (int, int) {
 	return outsideWidth / 2, outsideHeight / 2
+}
+
+func (g *Game) resetGame() {
+	g.player.hp = 100
+	g.enemiesKilled = 0
+	g.gameOver = false
+	for _, enemy := range g.enemies {
+		close(enemy.done)
+	}
+
+	g.enemies = []*Enemy{}
+
+	for i := range 20 {
+		// Generate random positions for the enemies
+		x := rand.Intn(1920 / 2) // Assuming the screen width is 1920
+		y := rand.Intn(1080 / 2) // Assuming the screen height is 1080
+		g.enemies = append(g.enemies, NewEnemy(enemyTypes[(i%len(enemyTypes))], float64(x), float64(y)))
+	}
 }
 
 func main() {
@@ -707,7 +764,6 @@ func main() {
 	}
 
 	// Example of adding an enemy
-	enemyTypes := []string{"Slime2", "Slime3"}
 
 	for i := range 20 {
 		// Generate random positions for the enemies
