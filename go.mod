@@ -1,4 +1,4 @@
-module github.com/hibooboo2/npcs
+module github.com/hibooboo2/slime_tag
 
 go 1.23.5
 

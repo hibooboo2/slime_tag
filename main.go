@@ -73,6 +73,8 @@ func NewSpritePack(slimeName string) *SpritePack {
 func NewPlayer(playerType string, spritePack *SpritePack) (*Player, error) {
 	return &Player{
 		playerType: playerType,
+		x:          100, // Center of the screen horizontally
+		y:          100, // Center of the screen vertically
 		spritePack: spritePack,
 	}, nil
 }
@@ -111,6 +113,7 @@ type Bullet struct {
 	angle        float32
 	speed        float32
 	creationTime time.Time // Add creationTime to track bullet age
+	hp           int
 }
 
 type Enemy struct {
@@ -147,6 +150,11 @@ func (e *Enemy) RandomMovement() {
 				e.attacking = time.Now().Add(time.Second * 2)
 			}
 		default:
+			// Stop moving if HP is less than 1
+			if e.hp < 1 {
+				return
+			}
+
 			// Move the enemy
 			e.x += dx * 1 // Adjust speed as needed
 			e.y += dy * 1 // Adjust speed as needed
@@ -329,7 +337,12 @@ func (g *Game) checkBulletCollisions() {
 	for _, bullet := range g.bullets {
 		collided := false
 		for _, enemy := range g.enemies {
+			if enemy.hp < 1 {
+				continue
+			}
 			// Define the enemy's bounding rectangle
+
+			// EMEMY HIT BOX IS 32px *32px
 			enemyRect := image.Rect(
 				int(enemy.x)+16, int(enemy.y)+16,
 				int(enemy.x)+enemy.sprites.idle.frameWidth-16,
@@ -337,13 +350,15 @@ func (g *Game) checkBulletCollisions() {
 			)
 
 			// Check if the bullet is within the enemy's rectangle
-			if enemyRect.Min.X <= int(bullet.x) && int(bullet.x) <= enemyRect.Max.X &&
-				enemyRect.Min.Y <= int(bullet.y) && int(bullet.y) <= enemyRect.Max.Y {
+			// The enemy is hit by bullets here wihch are a radius of 3px
+			if enemyRect.Min.X <= int(bullet.x)+3 && int(bullet.x)-3 <= enemyRect.Max.X &&
+				enemyRect.Min.Y <= int(bullet.y)+3 && int(bullet.y)-3 <= enemyRect.Max.Y {
 				// Collision detected
 				enemy.hp -= 10
 				collided = true
 				break
 			}
+
 		}
 		if !collided {
 			remainingBullets = append(remainingBullets, bullet)
@@ -354,9 +369,13 @@ func (g *Game) checkBulletCollisions() {
 
 func (g *Game) checkEnemyCollisions() {
 	for _, enemy := range g.enemies {
+		if enemy.hp <= 1 {
+			continue
+		}
 		if enemy.attacking.After(time.Now()) {
 			// Define the player's bounding rectangle
 			playerRect := image.Rect(
+
 				int(g.player.x)+16, int(g.player.y)+16,
 				int(g.player.x)+g.player.spritePack.idle.frameWidth-16,
 				int(g.player.y)+g.player.spritePack.idle.frameHeight-16,
@@ -372,7 +391,7 @@ func (g *Game) checkEnemyCollisions() {
 			// Check for collision
 			if playerRect.Overlaps(enemyRect) {
 				// Damage the player
-				g.player.hp -= 10
+				g.player.hp -= 20
 			}
 		}
 	}
@@ -389,48 +408,40 @@ func (g *Game) Update() error {
 
 	} else if !isConnected {
 		g.player.running = ebiten.IsKeyPressed(ebiten.KeyShift)
-		// Calculate movement vector
-		var dx, dy float32
-		if ebiten.IsKeyPressed(ebiten.KeyW) {
-			dy -= 2
-		}
-		if ebiten.IsKeyPressed(ebiten.KeyS) {
-			dy += 2
-		}
+
+		// Adjust the player's movement angle with A and D keys
 		if ebiten.IsKeyPressed(ebiten.KeyA) {
-			dx -= 2
+			g.player.movementAngle -= 2 // Rotate left
 		}
 		if ebiten.IsKeyPressed(ebiten.KeyD) {
-			dx += 2
+			g.player.movementAngle += 2 // Rotate right
 		}
 
-		// Normalize the vector if both x and y are non-zero
-		if dx != 0 && dy != 0 {
-			length := float32(math.Sqrt(float64(dx*dx + dy*dy)))
-			dx /= length
-			dy /= length
+		// Calculate movement vector based on W and S keys
+		var dx, dy float64
+		rad := float64(g.player.movementAngle) * (math.Pi / 180)
+		if ebiten.IsKeyPressed(ebiten.KeyW) {
+			dx += math.Cos(rad) * 2
+			dy += math.Sin(rad) * 2
+		}
+		if ebiten.IsKeyPressed(ebiten.KeyS) {
+			dx -= math.Cos(rad) * 2
+			dy -= math.Sin(rad) * 2
 		}
 
 		// Update player position
-		g.player.x += float64(dx) // Convert dx to float64
-		g.player.y += float64(dy) // Convert dy to float64
+		g.player.x += dx
+		g.player.y += dy
 		if g.player.running {
-			g.player.x += float64(dx)
-			g.player.y += float64(dy)
+			g.player.x += dx
+			g.player.y += dy
 		}
-
-		// Calculate movement angle
-		movementAngle := float32(math.Atan2(float64(dy), float64(dx)) * (180 / math.Pi))
 
 		// Handle swinging action
 		g.player.attacking = ebiten.IsKeyPressed(ebiten.KeySpace)
 
-		// Store the movement angle in the player struct
-		if dx != 0 || dy != 0 {
-			g.player.movementAngle = movementAngle
-		}
 		// Handle shooting action every 10th frame
-		if g.frameCount%10 == 0 && ebiten.IsKeyPressed(ebiten.KeyE) {
+		if g.frameCount%10 == 0 && g.player.attacking {
 			bullet := &Bullet{
 				x:            float32(g.player.x) + 32, // Convert x to float32
 				y:            float32(g.player.y) + 32, // Convert y to float32
@@ -440,7 +451,6 @@ func (g *Game) Update() error {
 			}
 			g.bullets = append(g.bullets, bullet)
 		}
-
 	}
 
 	ebiten.SetFullscreen(true)
@@ -552,6 +562,13 @@ func (g *Game) drawGameView(screen *ebiten.Image) {
 
 	// Draw the player's HP bar above the player
 	drawHPBar(screen, g.player.x, g.player.y-10, g.player.hp, 100, color.RGBA{0, 255, 0, 255})
+
+	// Draw an arrow pointing in the direction of the player's movement
+	arrowLength := 20.0
+	rad := float64(g.player.movementAngle) * (math.Pi / 180)
+	arrowX := 32 + g.player.x + arrowLength*math.Cos(rad)
+	arrowY := 32 + g.player.y + arrowLength*math.Sin(rad)
+	drawArc(screen, float32(arrowX), float32(arrowY), 5, float32(rad-20), float32(rad+20), color.RGBA{255, 255, 0, 255}) // Yellow circle for arrow head
 
 	sprite := g.player.spritePack.idle
 	switch {
