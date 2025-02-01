@@ -23,11 +23,12 @@ const (
 )
 
 type AnimatedSprite struct {
-	image       *ebiten.Image
-	width       int
-	frame       int
-	frameWidth  int
-	frameHeight int
+	image              *ebiten.Image
+	width              int
+	frame              int
+	lastGameFrameCount int
+	frameWidth         int
+	frameHeight        int
 }
 
 type SpritePack struct {
@@ -107,8 +108,13 @@ func (sprite *AnimatedSprite) GetCurrentSprite(frameCount int, movementAngle flo
 
 	isFinished := sprite.frame == sprite.width
 
+	if frameCount-sprite.lastGameFrameCount != frameCount-1 {
+		sprite.frame = 0
+	}
+
 	if sprite.frame >= sprite.width {
 		sprite.frame = 0
+		sprite.lastGameFrameCount = frameCount
 	}
 
 	return isFinished, sprite.image.SubImage(image.Rect(x, direction*sprite.frameHeight, x+sprite.frameWidth, direction*sprite.frameHeight+sprite.frameHeight)).(*ebiten.Image)
@@ -500,9 +506,11 @@ func (g *Game) Update() error {
 	for _, bullet := range g.bullets {
 		// Check if the bullet is older than 5 seconds
 		if currentTime.Sub(bullet.creationTime) < 5*time.Second {
-			rad := bullet.angle * (math.Pi / 180)
-			bullet.x += bullet.speed * float32(math.Cos(float64(rad)))
-			bullet.y += bullet.speed * float32(math.Sin(float64(rad)))
+			if g.frameCount%5 == 0 { // Update bullet position every 5 frames
+				rad := bullet.angle * (math.Pi / 180)
+				bullet.x += bullet.speed * float32(math.Cos(float64(rad)))
+				bullet.y += bullet.speed * float32(math.Sin(float64(rad)))
+			}
 			activeBullets = append(activeBullets, bullet)
 		}
 	}
