@@ -506,11 +506,9 @@ func (g *Game) Update() error {
 	for _, bullet := range g.bullets {
 		// Check if the bullet is older than 5 seconds
 		if currentTime.Sub(bullet.creationTime) < 5*time.Second {
-			if g.frameCount%5 == 0 { // Update bullet position every 5 frames
-				rad := bullet.angle * (math.Pi / 180)
-				bullet.x += bullet.speed * float32(math.Cos(float64(rad)))
-				bullet.y += bullet.speed * float32(math.Sin(float64(rad)))
-			}
+			rad := bullet.angle * (math.Pi / 180)
+			bullet.x += bullet.speed * float32(math.Cos(float64(rad)))
+			bullet.y += bullet.speed * float32(math.Sin(float64(rad)))
 			activeBullets = append(activeBullets, bullet)
 		}
 	}
