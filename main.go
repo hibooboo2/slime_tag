@@ -16,6 +16,12 @@ import (
 	"github.com/hajimehoshi/ebiten/v2/vector"
 )
 
+// Define screen size constants
+const (
+	screenWidth  = 1000
+	screenHeight = 640
+)
+
 type AnimatedSprite struct {
 	image       *ebiten.Image
 	width       int
@@ -170,16 +176,16 @@ func (e *Enemy) RandomMovement() {
 			if e.x < 0 {
 				e.x = 0
 				dx = -dx
-			} else if e.x > 1920 {
-				e.x = 1920
+			} else if e.x > screenWidth {
+				e.x = screenWidth
 				dx = -dx
 			}
 
 			if e.y < 0 {
 				e.y = 0
 				dy = -dy
-			} else if e.y > 1080 {
-				e.y = 1080
+			} else if e.y > screenHeight {
+				e.y = screenHeight
 				dy = -dy
 			}
 
@@ -476,16 +482,15 @@ func (g *Game) Update() error {
 		}
 	}
 
-	ebiten.SetFullscreen(true)
 	if g.player.x <= 0 {
-		g.player.x = 1920 // Wrap to the right edge
-	} else if g.player.x >= 1920 {
+		g.player.x = screenWidth // Wrap to the right edge
+	} else if g.player.x >= screenWidth {
 		g.player.x = 0 // Wrap to the left edge
 	}
 
 	if g.player.y <= 0 {
-		g.player.y = 1080 // Wrap to the bottom edge
-	} else if g.player.y >= 1080 {
+		g.player.y = screenHeight // Wrap to the bottom edge
+	} else if g.player.y >= screenHeight {
 		g.player.y = 0 // Wrap to the top edge
 	}
 
@@ -721,7 +726,7 @@ func (g *Game) Draw(screen *ebiten.Image) {
 }
 
 func (g *Game) Layout(outsideWidth, outsideHeight int) (int, int) {
-	return 1920, 1080
+	return screenWidth, screenHeight
 }
 
 func (g *Game) resetGame() {
@@ -735,8 +740,8 @@ func (g *Game) resetGame() {
 
 	for i := range 20 {
 		// Generate random positions for the enemies
-		x := rand.Intn(1920 / 2) // Assuming the screen width is 1920
-		y := rand.Intn(1080 / 2) // Assuming the screen height is 1080
+		x := rand.Intn(screenWidth / 2)  // Assuming the screen width is 1920
+		y := rand.Intn(screenHeight / 2) // Assuming the screen height is 1080
 		g.enemies = append(g.enemies, NewEnemy(enemyTypes[(i%len(enemyTypes))], float64(x), float64(y)))
 	}
 }
@@ -766,8 +771,8 @@ func main() {
 
 	for i := range 20 {
 		// Generate random positions for the enemies
-		x := rand.Intn(1920 / 2) // Assuming the screen width is 1920
-		y := rand.Intn(1080 / 2) // Assuming the screen height is 1080
+		x := rand.Intn(screenWidth / 2)  // Assuming the screen width is 1920
+		y := rand.Intn(screenHeight / 2) // Assuming the screen height is 1080
 		game.enemies = append(game.enemies, NewEnemy(enemyTypes[(i%len(enemyTypes))], float64(x), float64(y)))
 	}
 
@@ -775,10 +780,9 @@ func main() {
 	// Example of adding a debug log
 	game.addDebugLog("Game started")
 
-	ebiten.SetWindowSize(1920, 1080) //1080p
-
+	ebiten.SetWindowSize(450, 450) //1080p
 	ebiten.SetWindowTitle("Basic Game Menu")
-	ebiten.SetWindowResizable(true)
+	ebiten.SetFullscreen(true)
 	if err := ebiten.RunGame(game); err != nil {
 		log.Fatal(err)
 	}
