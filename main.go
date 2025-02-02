@@ -201,21 +201,23 @@ func (e *Enemy) RandomMovement() {
 }
 
 type Game struct {
-	menuOptions   []string
-	selected      int
-	inMenu        bool
-	keys          *Keys
-	exit          bool
-	player        *Player
-	debugLogs     []string
-	lastLogTime   time.Time
-	settings      bool
-	bullets       []*Bullet
-	frameCount    int // Add a frame counter
-	gamepads      []ebiten.GamepadID
-	enemies       []*Enemy // Add a slice to hold enemies
-	enemiesKilled int      // Add a field to track the number of enemies killed
-	gameOver      bool     // Add a field to track if the game is over
+	menuOptions    []string
+	selected       int
+	inMenu         bool
+	keys           *Keys
+	exit           bool
+	player         *Player
+	debugLogs      []string
+	lastLogTime    time.Time
+	settings       bool
+	bullets        []*Bullet
+	frameCount     int // Add a frame counter
+	gamepads       []ebiten.GamepadID
+	enemies        []*Enemy      // Add a slice to hold enemies
+	enemiesKilled  int           // Add a field to track the number of enemies killed
+	gameOver       bool          // Add a field to track if the game is over
+	lastEnemySpawn time.Time     // Track when we last spawned an enemy
+	spawnInterval  time.Duration // Current interval between enemy spawns
 }
 
 type KeyEvent struct {
@@ -386,6 +388,12 @@ func (g *Game) checkBulletCollisions() {
 				enemy.hp -= 20
 				if enemy.hp <= 0 {
 					g.enemiesKilled++ // Increment the enemies killed count
+					// Reduce spawn interval by 15ms per kill, with a minimum of 100ms
+					newInterval := g.spawnInterval - (15 * time.Millisecond)
+					if newInterval < 100*time.Millisecond {
+						newInterval = 100 * time.Millisecond
+					}
+					g.spawnInterval = newInterval
 				}
 				collided = true
 				break
@@ -520,12 +528,36 @@ func (g *Game) Update() error {
 	if g.frameCount%10 == 0 {
 		// Check for enemy collisions with the player
 		g.checkEnemyCollisions()
+
+		// Check if all enemies are defeated
+		if len(g.enemies) == 0 {
+			// Spawn 20 new enemies
+			for i := range 20 {
+				x := rand.Intn(1920 / 2)
+				y := rand.Intn(1080 / 2)
+				g.enemies = append(g.enemies, NewEnemy(enemyTypes[(i%len(enemyTypes))], float64(x), float64(y)))
+			}
+		}
 	}
 	// Increment the frame counter
 	g.frameCount++
 
 	if g.player.hp <= 0 {
 		g.gameOver = true // Set game over state when player dies
+	}
+
+	// Initialize spawn interval if it's zero
+	if g.spawnInterval == 0 {
+		g.spawnInterval = 30 * time.Second
+		g.lastEnemySpawn = time.Now()
+	}
+
+	// Check if it's time to spawn a new enemy
+	if time.Since(g.lastEnemySpawn) >= g.spawnInterval {
+		x := rand.Intn(1920 / 2)
+		y := rand.Intn(1080 / 2)
+		g.enemies = append(g.enemies, NewEnemy(enemyTypes[rand.Intn(len(enemyTypes))], float64(x), float64(y)))
+		g.lastEnemySpawn = time.Now()
 	}
 
 	return nil
@@ -750,6 +782,8 @@ func (g *Game) resetGame() {
 		y := rand.Intn(screenHeight / 2) // Assuming the screen height is 1080
 		g.enemies = append(g.enemies, NewEnemy(enemyTypes[(i%len(enemyTypes))], float64(x), float64(y)))
 	}
+	g.spawnInterval = 30 * time.Second
+	g.lastEnemySpawn = time.Now()
 }
 
 func main() {
