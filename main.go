@@ -13,7 +13,11 @@ import (
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/ebitenutil"
 	"github.com/hajimehoshi/ebiten/v2/inpututil"
+	"github.com/hajimehoshi/ebiten/v2/text"
 	"github.com/hajimehoshi/ebiten/v2/vector"
+	"golang.org/x/image/font"
+	"golang.org/x/image/font/gofont/goregular"
+	"golang.org/x/image/font/opentype"
 )
 
 // Define screen size constants
@@ -21,6 +25,24 @@ const (
 	screenWidth  = 1000
 	screenHeight = 640
 )
+
+var gameFont font.Face
+
+func init() {
+	tt, err := opentype.Parse(goregular.TTF)
+	if err != nil {
+		log.Fatal(err)
+	}
+	const dpi = 72
+	gameFont, err = opentype.NewFace(tt, &opentype.FaceOptions{
+		Size:    24,
+		DPI:     dpi,
+		Hinting: font.HintingFull,
+	})
+	if err != nil {
+		log.Fatal(err)
+	}
+}
 
 type AnimatedSprite struct {
 	image              *ebiten.Image
@@ -201,21 +223,23 @@ func (e *Enemy) RandomMovement() {
 }
 
 type Game struct {
-	menuOptions   []string
-	selected      int
-	inMenu        bool
-	keys          *Keys
-	exit          bool
-	player        *Player
-	debugLogs     []string
-	lastLogTime   time.Time
-	settings      bool
-	bullets       []*Bullet
-	frameCount    int // Add a frame counter
-	gamepads      []ebiten.GamepadID
-	enemies       []*Enemy // Add a slice to hold enemies
-	enemiesKilled int      // Add a field to track the number of enemies killed
-	gameOver      bool     // Add a field to track if the game is over
+	menuOptions    []string
+	selected       int
+	inMenu         bool
+	keys           *Keys
+	exit           bool
+	player         *Player
+	debugLogs      []string
+	lastLogTime    time.Time
+	settings       bool
+	bullets        []*Bullet
+	frameCount     int // Add a frame counter
+	gamepads       []ebiten.GamepadID
+	enemies        []*Enemy      // Add a slice to hold enemies
+	enemiesKilled  int           // Add a field to track the number of enemies killed
+	gameOver       bool          // Add a field to track if the game is over
+	lastEnemySpawn time.Time     // Track when we last spawned an enemy
+	spawnInterval  time.Duration // Current interval between enemy spawns
 }
 
 type KeyEvent struct {
@@ -386,6 +410,12 @@ func (g *Game) checkBulletCollisions() {
 				enemy.hp -= 20
 				if enemy.hp <= 0 {
 					g.enemiesKilled++ // Increment the enemies killed count
+					// Reduce spawn interval by 15ms per kill, with a minimum of 100ms
+					enemySpawnRate := g.spawnInterval - (50 * time.Millisecond)
+					if enemySpawnRate < 100*time.Millisecond {
+						enemySpawnRate = 100 * time.Millisecond
+					}
+					g.spawnInterval = enemySpawnRate
 				}
 				collided = true
 				break
@@ -444,47 +474,49 @@ func (g *Game) Update() error {
 		}
 		g.player.running = ebiten.IsKeyPressed(ebiten.KeyShift)
 
-		// Adjust the player's movement angle with A and D keys
-		if ebiten.IsKeyPressed(ebiten.KeyA) {
-			g.player.movementAngle -= 2 // Rotate left
-		}
-		if ebiten.IsKeyPressed(ebiten.KeyD) {
-			g.player.movementAngle += 2 // Rotate right
+		// Calculate movement based on WASD keys
+		dx, dy := 0.0, 0.0
+		speed := 2.0
+		if g.player.running {
+			speed = 4.0
 		}
 
-		// Calculate movement vector based on W and S keys
-		var dx, dy float64
-		rad := float64(g.player.movementAngle) * (math.Pi / 180)
 		if ebiten.IsKeyPressed(ebiten.KeyW) {
-			dx += math.Cos(rad) * 2
-			dy += math.Sin(rad) * 2
+			dy -= speed
 		}
 		if ebiten.IsKeyPressed(ebiten.KeyS) {
-			dx -= math.Cos(rad) * 2
-			dy -= math.Sin(rad) * 2
+			dy += speed
+		}
+		if ebiten.IsKeyPressed(ebiten.KeyA) {
+			dx -= speed
+		}
+		if ebiten.IsKeyPressed(ebiten.KeyD) {
+			dx += speed
 		}
 
 		// Update player position
 		g.player.x += dx
 		g.player.y += dy
-		if g.player.running {
-			g.player.x += dx
-			g.player.y += dy
+
+		// Calculate movement angle for sprite direction
+		if dx != 0 || dy != 0 {
+			g.player.movementAngle = float32(math.Atan2(dy, dx) * (180 / math.Pi))
 		}
 
-		// Handle swinging action
-		g.player.attacking = ebiten.IsKeyPressed(ebiten.KeySpace)
-
-		// Handle shooting action every 10th frame
-		if g.frameCount%10 == 0 && g.player.attacking {
+		// Handle shooting action
+		if ebiten.IsKeyPressed(ebiten.KeySpace) && g.frameCount%10 == 0 {
+			g.player.attacking = true
+			// Create bullet aimed at mouse position
 			bullet := &Bullet{
-				x:            float32(g.player.x) + 32, // Convert x to float32
-				y:            float32(g.player.y) + 32, // Convert y to float32
-				angle:        g.player.movementAngle,
+				x:            float32(g.player.x) + 32,
+				y:            float32(g.player.y) + 32,
+				angle:        calculateAngleToMouse(g.player.x, g.player.y),
 				speed:        10,
-				creationTime: time.Now(), // Initialize creationTime
+				creationTime: time.Now(),
 			}
 			g.bullets = append(g.bullets, bullet)
+		} else {
+			g.player.attacking = false
 		}
 	}
 
@@ -520,12 +552,36 @@ func (g *Game) Update() error {
 	if g.frameCount%10 == 0 {
 		// Check for enemy collisions with the player
 		g.checkEnemyCollisions()
+
+		// Check if all enemies are defeated
+		if len(g.enemies) == 0 {
+			// Spawn 20 new enemies
+			for i := range 20 {
+				x := rand.Intn(1920 / 2)
+				y := rand.Intn(1080 / 2)
+				g.enemies = append(g.enemies, NewEnemy(enemyTypes[(i%len(enemyTypes))], float64(x), float64(y)))
+			}
+		}
 	}
 	// Increment the frame counter
 	g.frameCount++
 
 	if g.player.hp <= 0 {
 		g.gameOver = true // Set game over state when player dies
+	}
+
+	// Initialize spawn interval if it's zero
+	if g.spawnInterval == 0 {
+		g.spawnInterval = 5 * time.Second
+		g.lastEnemySpawn = time.Now()
+	}
+
+	// Check if it's time to spawn a new enemy
+	if time.Since(g.lastEnemySpawn) >= g.spawnInterval {
+		x := rand.Intn(1920 / 2)
+		y := rand.Intn(1080 / 2)
+		g.enemies = append(g.enemies, NewEnemy(enemyTypes[rand.Intn(len(enemyTypes))], float64(x), float64(y)))
+		g.lastEnemySpawn = time.Now()
 	}
 
 	return nil
@@ -709,6 +765,76 @@ func (g *Game) drawGameOver(screen *ebiten.Image) {
 	ebitenutil.DebugPrintAt(screen, "Press R to restart", 300, 250)
 }
 
+func drawStatusBox(screen *ebiten.Image, x, y, width, height float32, enemies, killed int) {
+	// Draw gradient background with rounded corners
+	cornerRadius := float32(30) // Increased corner radius for more pronounced effect
+
+	// Draw multiple rectangles with decreasing alpha for gradient effect
+	for i := 0; i < 5; i++ {
+		alpha := uint8(60 - i*10) // Reduced base alpha to 60 (40% transparent)
+		path := &vector.Path{}
+
+		// Start at top-left corner
+		path.MoveTo(x, y)
+
+		// Top edge
+		path.LineTo(x+width-cornerRadius, y)
+
+		// Top-right corner (inverted)
+		path.Arc(x+width-cornerRadius, y+cornerRadius, cornerRadius, -math.Pi/2, 0, vector.Clockwise)
+
+		// Right edge
+		path.LineTo(x+width, y+height-cornerRadius)
+
+		// Bottom-right corner (inverted)
+		path.Arc(x+width-cornerRadius, y+height-cornerRadius, cornerRadius, 0, math.Pi/2, vector.Clockwise)
+
+		// Bottom edge
+		path.LineTo(x+cornerRadius, y+height)
+
+		// Bottom-left corner (inverted)
+		path.Arc(x+cornerRadius, y+height-cornerRadius, cornerRadius, math.Pi/2, math.Pi, vector.Clockwise)
+
+		// Left edge
+		path.LineTo(x, y+cornerRadius)
+
+		// Top-left corner (inverted)
+		path.Arc(x+cornerRadius, y+cornerRadius, cornerRadius, math.Pi, -math.Pi/2, vector.Clockwise)
+
+		vertices, indices := path.AppendVerticesAndIndicesForFilling(nil, nil)
+
+		// Create gradient color
+		src := ebiten.NewImage(1, 1)
+		src.Fill(color.RGBA{30, 30, 50, alpha})
+
+		op := &ebiten.DrawTrianglesOptions{}
+		op.FillRule = ebiten.EvenOdd
+		screen.DrawTriangles(vertices, indices, src, op)
+	}
+
+	// Draw text with labels
+	score := killed * 100 // Calculate score (100 points per kill)
+
+	texts := []struct {
+		label   string
+		value   string
+		yOffset float32
+	}{
+		{"Enemies Remaining:", fmt.Sprintf("%d", enemies), height * 0.25}, // 25% from top
+		{"Enemies Killed:", fmt.Sprintf("%d", killed), height * 0.5},      // 50% from top (middle)
+		{"Score:", fmt.Sprintf("%d", score), height * 0.75},               // 75% from top
+	}
+
+	for _, txt := range texts {
+		// Draw label (left-aligned)
+		text.Draw(screen, txt.label, gameFont, int(x)+30, int(y+txt.yOffset), color.White)
+
+		// Draw value (right-aligned)
+		bounds := text.BoundString(gameFont, txt.value)
+		text.Draw(screen, txt.value, gameFont, int(x+width-30-float32(bounds.Dx())), int(y+txt.yOffset), color.White)
+	}
+}
+
 func (g *Game) Draw(screen *ebiten.Image) {
 	defer g.drawDebugLogs(screen)
 
@@ -724,11 +850,13 @@ func (g *Game) Draw(screen *ebiten.Image) {
 
 	g.drawGameView(screen)
 
+	// Draw status box in top right corner with dimensions reduced by 30%
+	drawStatusBox(screen, 1420, 20, 406, 210, len(g.enemies), g.enemiesKilled)
+
 	if g.gameOver {
 		g.drawGameOver(screen)
 		return
 	}
-
 }
 
 func (g *Game) Layout(outsideWidth, outsideHeight int) (int, int) {
@@ -750,6 +878,15 @@ func (g *Game) resetGame() {
 		y := rand.Intn(screenHeight / 2) // Assuming the screen height is 1080
 		g.enemies = append(g.enemies, NewEnemy(enemyTypes[(i%len(enemyTypes))], float64(x), float64(y)))
 	}
+	g.spawnInterval = 30 * time.Second
+	g.lastEnemySpawn = time.Now()
+}
+
+func calculateAngleToMouse(playerX, playerY float64) float32 {
+	mouseX, mouseY := ebiten.CursorPosition()
+	dx := float64(mouseX) - (playerX + 32) // +32 to aim from center of player
+	dy := float64(mouseY) - (playerY + 32)
+	return float32(math.Atan2(dy, dx) * (180 / math.Pi))
 }
 
 func main() {
