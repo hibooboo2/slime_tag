@@ -13,7 +13,11 @@ import (
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/ebitenutil"
 	"github.com/hajimehoshi/ebiten/v2/inpututil"
+	"github.com/hajimehoshi/ebiten/v2/text"
 	"github.com/hajimehoshi/ebiten/v2/vector"
+	"golang.org/x/image/font"
+	"golang.org/x/image/font/gofont/goregular"
+	"golang.org/x/image/font/opentype"
 )
 
 // Define screen size constants
@@ -21,6 +25,24 @@ const (
 	screenWidth  = 1000
 	screenHeight = 640
 )
+
+var gameFont font.Face
+
+func init() {
+	tt, err := opentype.Parse(goregular.TTF)
+	if err != nil {
+		log.Fatal(err)
+	}
+	const dpi = 72
+	gameFont, err = opentype.NewFace(tt, &opentype.FaceOptions{
+		Size:    24,
+		DPI:     dpi,
+		Hinting: font.HintingFull,
+	})
+	if err != nil {
+		log.Fatal(err)
+	}
+}
 
 type AnimatedSprite struct {
 	image              *ebiten.Image
@@ -741,6 +763,76 @@ func (g *Game) drawGameOver(screen *ebiten.Image) {
 	ebitenutil.DebugPrintAt(screen, "Press R to restart", 300, 250)
 }
 
+func drawStatusBox(screen *ebiten.Image, x, y, width, height float32, enemies, killed int) {
+	// Draw gradient background with rounded corners
+	cornerRadius := float32(30) // Increased corner radius for more pronounced effect
+
+	// Draw multiple rectangles with decreasing alpha for gradient effect
+	for i := 0; i < 5; i++ {
+		alpha := uint8(60 - i*10) // Reduced base alpha to 60 (40% transparent)
+		path := &vector.Path{}
+
+		// Start at top-left corner
+		path.MoveTo(x, y)
+
+		// Top edge
+		path.LineTo(x+width-cornerRadius, y)
+
+		// Top-right corner (inverted)
+		path.Arc(x+width-cornerRadius, y+cornerRadius, cornerRadius, -math.Pi/2, 0, vector.Clockwise)
+
+		// Right edge
+		path.LineTo(x+width, y+height-cornerRadius)
+
+		// Bottom-right corner (inverted)
+		path.Arc(x+width-cornerRadius, y+height-cornerRadius, cornerRadius, 0, math.Pi/2, vector.Clockwise)
+
+		// Bottom edge
+		path.LineTo(x+cornerRadius, y+height)
+
+		// Bottom-left corner (inverted)
+		path.Arc(x+cornerRadius, y+height-cornerRadius, cornerRadius, math.Pi/2, math.Pi, vector.Clockwise)
+
+		// Left edge
+		path.LineTo(x, y+cornerRadius)
+
+		// Top-left corner (inverted)
+		path.Arc(x+cornerRadius, y+cornerRadius, cornerRadius, math.Pi, -math.Pi/2, vector.Clockwise)
+
+		vertices, indices := path.AppendVerticesAndIndicesForFilling(nil, nil)
+
+		// Create gradient color
+		src := ebiten.NewImage(1, 1)
+		src.Fill(color.RGBA{30, 30, 50, alpha})
+
+		op := &ebiten.DrawTrianglesOptions{}
+		op.FillRule = ebiten.EvenOdd
+		screen.DrawTriangles(vertices, indices, src, op)
+	}
+
+	// Draw text with labels
+	score := killed * 100 // Calculate score (100 points per kill)
+
+	texts := []struct {
+		label   string
+		value   string
+		yOffset float32
+	}{
+		{"Enemies Remaining:", fmt.Sprintf("%d", enemies), height * 0.25}, // 25% from top
+		{"Enemies Killed:", fmt.Sprintf("%d", killed), height * 0.5},      // 50% from top (middle)
+		{"Score:", fmt.Sprintf("%d", score), height * 0.75},               // 75% from top
+	}
+
+	for _, txt := range texts {
+		// Draw label (left-aligned)
+		text.Draw(screen, txt.label, gameFont, int(x)+30, int(y+txt.yOffset), color.White)
+
+		// Draw value (right-aligned)
+		bounds := text.BoundString(gameFont, txt.value)
+		text.Draw(screen, txt.value, gameFont, int(x+width-30-float32(bounds.Dx())), int(y+txt.yOffset), color.White)
+	}
+}
+
 func (g *Game) Draw(screen *ebiten.Image) {
 	defer g.drawDebugLogs(screen)
 
@@ -756,11 +848,13 @@ func (g *Game) Draw(screen *ebiten.Image) {
 
 	g.drawGameView(screen)
 
+	// Draw status box in top right corner with dimensions reduced by 30%
+	drawStatusBox(screen, 1420, 20, 406, 210, len(g.enemies), g.enemiesKilled)
+
 	if g.gameOver {
 		g.drawGameOver(screen)
 		return
 	}
-
 }
 
 func (g *Game) Layout(outsideWidth, outsideHeight int) (int, int) {
