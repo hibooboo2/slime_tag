@@ -411,11 +411,11 @@ func (g *Game) checkBulletCollisions() {
 				if enemy.hp <= 0 {
 					g.enemiesKilled++ // Increment the enemies killed count
 					// Reduce spawn interval by 15ms per kill, with a minimum of 100ms
-					newInterval := g.spawnInterval - (15 * time.Millisecond)
-					if newInterval < 100*time.Millisecond {
-						newInterval = 100 * time.Millisecond
+					enemySpawnRate := g.spawnInterval - (50 * time.Millisecond)
+					if enemySpawnRate < 100*time.Millisecond {
+						enemySpawnRate = 100 * time.Millisecond
 					}
-					g.spawnInterval = newInterval
+					g.spawnInterval = enemySpawnRate
 				}
 				collided = true
 				break
@@ -474,47 +474,49 @@ func (g *Game) Update() error {
 		}
 		g.player.running = ebiten.IsKeyPressed(ebiten.KeyShift)
 
-		// Adjust the player's movement angle with A and D keys
-		if ebiten.IsKeyPressed(ebiten.KeyA) {
-			g.player.movementAngle -= 2 // Rotate left
-		}
-		if ebiten.IsKeyPressed(ebiten.KeyD) {
-			g.player.movementAngle += 2 // Rotate right
+		// Calculate movement based on WASD keys
+		dx, dy := 0.0, 0.0
+		speed := 2.0
+		if g.player.running {
+			speed = 4.0
 		}
 
-		// Calculate movement vector based on W and S keys
-		var dx, dy float64
-		rad := float64(g.player.movementAngle) * (math.Pi / 180)
 		if ebiten.IsKeyPressed(ebiten.KeyW) {
-			dx += math.Cos(rad) * 2
-			dy += math.Sin(rad) * 2
+			dy -= speed
 		}
 		if ebiten.IsKeyPressed(ebiten.KeyS) {
-			dx -= math.Cos(rad) * 2
-			dy -= math.Sin(rad) * 2
+			dy += speed
+		}
+		if ebiten.IsKeyPressed(ebiten.KeyA) {
+			dx -= speed
+		}
+		if ebiten.IsKeyPressed(ebiten.KeyD) {
+			dx += speed
 		}
 
 		// Update player position
 		g.player.x += dx
 		g.player.y += dy
-		if g.player.running {
-			g.player.x += dx
-			g.player.y += dy
+
+		// Calculate movement angle for sprite direction
+		if dx != 0 || dy != 0 {
+			g.player.movementAngle = float32(math.Atan2(dy, dx) * (180 / math.Pi))
 		}
 
-		// Handle swinging action
-		g.player.attacking = ebiten.IsKeyPressed(ebiten.KeySpace)
-
-		// Handle shooting action every 10th frame
-		if g.frameCount%10 == 0 && g.player.attacking {
+		// Handle shooting action
+		if ebiten.IsKeyPressed(ebiten.KeySpace) && g.frameCount%10 == 0 {
+			g.player.attacking = true
+			// Create bullet aimed at mouse position
 			bullet := &Bullet{
-				x:            float32(g.player.x) + 32, // Convert x to float32
-				y:            float32(g.player.y) + 32, // Convert y to float32
-				angle:        g.player.movementAngle,
+				x:            float32(g.player.x) + 32,
+				y:            float32(g.player.y) + 32,
+				angle:        calculateAngleToMouse(g.player.x, g.player.y),
 				speed:        10,
-				creationTime: time.Now(), // Initialize creationTime
+				creationTime: time.Now(),
 			}
 			g.bullets = append(g.bullets, bullet)
+		} else {
+			g.player.attacking = false
 		}
 	}
 
@@ -570,7 +572,7 @@ func (g *Game) Update() error {
 
 	// Initialize spawn interval if it's zero
 	if g.spawnInterval == 0 {
-		g.spawnInterval = 30 * time.Second
+		g.spawnInterval = 5 * time.Second
 		g.lastEnemySpawn = time.Now()
 	}
 
@@ -878,6 +880,13 @@ func (g *Game) resetGame() {
 	}
 	g.spawnInterval = 30 * time.Second
 	g.lastEnemySpawn = time.Now()
+}
+
+func calculateAngleToMouse(playerX, playerY float64) float32 {
+	mouseX, mouseY := ebiten.CursorPosition()
+	dx := float64(mouseX) - (playerX + 32) // +32 to aim from center of player
+	dy := float64(mouseY) - (playerY + 32)
+	return float32(math.Atan2(dy, dx) * (180 / math.Pi))
 }
 
 func main() {
