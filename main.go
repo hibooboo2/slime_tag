@@ -233,25 +233,34 @@ func (e *Enemy) RandomMovement() {
 	}
 }
 
+type PowerUp struct {
+	icon      string
+	x, y      float64
+	spawnTime time.Time
+	bonus     int
+}
+
 type Game struct {
-	menuOptions    []string
-	selected       int
-	inMenu         bool
-	keys           *Keys
-	exit           bool
-	player         *Player
-	debugLogs      []string
-	lastLogTime    time.Time
-	settings       bool
-	bullets        []*Bullet
-	frameCount     int // Add a frame counter
-	gamepads       []ebiten.GamepadID
-	enemies        []*Enemy      // Add a slice to hold enemies
-	enemiesKilled  int           // Add a field to track the number of enemies killed
-	gameOver       bool          // Add a field to track if the game is over
-	lastEnemySpawn time.Time     // Track when we last spawned an enemy
-	spawnInterval  time.Duration // Current interval between enemy spawns
-	scaleFactor    float32       // Add this line to define scaleFactor
+	menuOptions      []string
+	selected         int
+	inMenu           bool
+	keys             *Keys
+	exit             bool
+	player           *Player
+	debugLogs        []string
+	lastLogTime      time.Time
+	settings         bool
+	bullets          []*Bullet
+	frameCount       int // Add a frame counter
+	gamepads         []ebiten.GamepadID
+	enemies          []*Enemy      // Add a slice to hold enemies
+	enemiesKilled    int           // Add a field to track the number of enemies killed
+	gameOver         bool          // Add a field to track if the game is over
+	lastEnemySpawn   time.Time     // Track when we last spawned an enemy
+	spawnInterval    time.Duration // Current interval between enemy spawns
+	scaleFactor      float32       // Add this line to define scaleFactor
+	powerUps         []*PowerUp
+	lastPowerUpSpawn time.Time // Add this line to track the last power-up spawn time
 }
 
 type KeyEvent struct {
@@ -397,7 +406,7 @@ func (g *Game) handleGamepadInput() bool {
 	return len(g.gamepads) > 0
 }
 
-func (g *Game) checkBulletCollisions() {
+func (g *Game) checkEnemyBulletCollisions() {
 	var remainingBullets []*Bullet
 	for _, bullet := range g.bullets {
 		collided := false
@@ -443,7 +452,7 @@ func (g *Game) checkBulletCollisions() {
 	g.bullets = remainingBullets
 }
 
-func (g *Game) checkEnemyCollisions() {
+func (g *Game) checkPlayerCollisionsAndAffects() {
 	for _, enemy := range g.enemies {
 		if enemy.hpBar.currentHP <= 1 {
 			continue
@@ -451,17 +460,15 @@ func (g *Game) checkEnemyCollisions() {
 		if enemy.attacking.After(time.Now()) {
 			// Define the player's bounding rectangle
 			playerRect := image.Rect(
-
+				int(g.player.x)-16, int(g.player.y)-16,
 				int(g.player.x)+16, int(g.player.y)+16,
-				int(g.player.x)+g.player.spritePack.idle.frameWidth-16,
-				int(g.player.y)+g.player.spritePack.idle.frameHeight-16,
 			)
 
 			// Define the enemy's bounding rectangle
 			enemyRect := image.Rect(
-				int(enemy.x)+16, int(enemy.y)+16,
 				int(enemy.x)+enemy.sprites.idle.frameWidth-16,
 				int(enemy.y)+enemy.sprites.idle.frameHeight-16,
+				int(enemy.x)+16, int(enemy.y)+16,
 			)
 
 			// Check for collision
@@ -473,6 +480,36 @@ func (g *Game) checkEnemyCollisions() {
 			}
 		}
 	}
+
+	// Check for power up collisions
+	newPowerUps := []*PowerUp{}
+	for _, powerUp := range g.powerUps {
+		// Define the power-up's bounding rectangle
+		powerUpRect := image.Rect(
+			int(powerUp.x)-15, int(powerUp.y)-15,
+
+			int(powerUp.x)+15, int(powerUp.y)+15,
+		)
+
+		// Define the player's bounding rectangle
+		playerRect := image.Rect(
+			int(g.player.x)-16, int(g.player.y)-16,
+			int(g.player.x)+16, int(g.player.y)+16,
+		)
+
+		// Check for collision
+		if playerRect.Overlaps(powerUpRect) {
+			switch powerUp.bonus {
+			case 0:
+				g.player.hp += 20
+			case 1:
+				g.player.hp -= 10
+			}
+		} else {
+			newPowerUps = append(newPowerUps, powerUp)
+		}
+	}
+	g.powerUps = newPowerUps
 }
 
 func (g *Game) Update() error {
@@ -573,11 +610,11 @@ func (g *Game) Update() error {
 	}
 
 	// Check for bullet collisions with enemies
-	g.checkBulletCollisions()
+	g.checkEnemyBulletCollisions()
 
 	if g.frameCount%10 == 0 {
 		// Check for enemy collisions with the player
-		g.checkEnemyCollisions()
+		g.checkPlayerCollisionsAndAffects()
 
 		// Check if all enemies are defeated
 		if len(g.enemies) == 0 {
@@ -608,6 +645,18 @@ func (g *Game) Update() error {
 		y := rand.Intn(1080 / 2)
 		g.enemies = append(g.enemies, NewEnemy(enemyTypes[rand.Intn(len(enemyTypes))], float64(x), float64(y)))
 		g.lastEnemySpawn = time.Now()
+	}
+
+	if time.Since(g.lastPowerUpSpawn) >= 10*time.Second {
+		g.powerUps = append(g.powerUps, &PowerUp{
+			icon:      "❤️",
+			x:         float64(rand.Intn(screenWidth)),
+			y:         float64(rand.Intn(screenHeight)),
+			spawnTime: time.Now(),
+			bonus:     0,
+		})
+
+		g.lastPowerUpSpawn = time.Now()
 	}
 
 	return nil
@@ -749,6 +798,12 @@ func (g *Game) drawGameView(screen *ebiten.Image) {
 	// Draw bullets
 	for _, bullet := range g.bullets {
 		vector.DrawFilledCircle(screen, bullet.x, bullet.y, 3, color.RGBA{255, 255, 255, 255}, true) // White circle for bullets
+	}
+
+	// Draw power-ups
+	for _, powerUp := range g.powerUps {
+		// Draw the power-up icon at its location
+		text.Draw(screen, powerUp.icon, gameFont, int(powerUp.x), int(powerUp.y), color.White)
 	}
 }
 
