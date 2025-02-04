@@ -77,7 +77,8 @@ var sprites = map[string]*ebiten.Image{}
 func NewSprite(fileName string, width int) *AnimatedSprite {
 	spriteImage, ok := sprites[fileName]
 	if !ok {
-		spriteImage, _, err := ebitenutil.NewImageFromFileSystem(slimes, fileName) // Load the sprite image
+		var err error
+		spriteImage, _, err = ebitenutil.NewImageFromFileSystem(slimes, fileName) // Load the sprite image
 		if err != nil {
 			panic(err)
 		}
@@ -115,7 +116,6 @@ func NewPlayer(playerType string, spritePack *SpritePack) (*Player, error) {
 }
 
 func (sprite *AnimatedSprite) GetCurrentSprite(frameCount int, movementAngle float32) (bool, *ebiten.Image) {
-
 	fps := int(ebiten.ActualFPS())
 	if fps == 0 {
 		fps = 60
