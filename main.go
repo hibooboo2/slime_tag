@@ -109,7 +109,13 @@ func NewPlayer(playerType string, spritePack *SpritePack) (*Player, error) {
 }
 
 func (sprite *AnimatedSprite) GetCurrentSprite(frameCount int, movementAngle float32) (bool, *ebiten.Image) {
-	if frameCount%10 == 0 {
+
+	fps := int(ebiten.ActualFPS())
+	if fps == 0 {
+		fps = 60
+	}
+
+	if frameCount%(fps/7) == 0 {
 		sprite.frame++
 	}
 
