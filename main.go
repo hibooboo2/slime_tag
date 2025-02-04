@@ -1031,16 +1031,19 @@ func drawStatusBox(screen *ebiten.Image, screenWidth, screenHeight int, enemies,
 	}
 
 	for _, txt := range texts {
+
+		bounds := text.BoundString(gameFont, txt.value)
+
+		// Add drop shadow
+		text.Draw(screen, txt.value, gameFont, int(x+width-28*scale-float32(bounds.Dx())), int(y+txt.yOffset)+int(2*scale), color.Black)
+		text.Draw(screen, txt.label, gameFont, int(x)+int(32*scale), int(y+txt.yOffset)+int(2*scale), color.Black)
+
 		// Draw label (left-aligned)
 		text.Draw(screen, txt.label, gameFont, int(x)+int(30*scale), int(y+txt.yOffset), color.RGBA{255, 165, 0, 255}) // Orange text
 
 		// Draw value (right-aligned)
-		bounds := text.BoundString(gameFont, txt.value)
 		text.Draw(screen, txt.value, gameFont, int(x+width-30*scale-float32(bounds.Dx())), int(y+txt.yOffset), color.RGBA{255, 165, 0, 255}) // Orange text
 
-		// Add drop shadow
-		text.Draw(screen, txt.label, gameFont, int(x)+int(32*scale), int(y+txt.yOffset)+int(2*scale), color.Black)
-		text.Draw(screen, txt.value, gameFont, int(x+width-28*scale-float32(bounds.Dx())), int(y+txt.yOffset)+int(2*scale), color.Black)
 	}
 }
 
