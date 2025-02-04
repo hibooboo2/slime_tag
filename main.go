@@ -738,7 +738,7 @@ func (g *Game) Update() error {
 
 	newPowerUps := []*PowerUp{}
 	for _, powerUp := range g.powerUps {
-		if time.Since(powerUp.spawnTime) > time.Second*10 {
+		if time.Since(powerUp.spawnTime) < time.Second*10 {
 			newPowerUps = append(newPowerUps, powerUp)
 		}
 	}
