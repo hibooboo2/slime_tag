@@ -550,6 +550,9 @@ func (g *Game) checkPlayerCollisionsAndAffects() {
 				g.player.hpBar.currentHP -= 10
 				g.player.hpBar.lastDamageTime = time.Now()
 				g.player.hpBar.visible = true
+
+				// Add floating text for damage
+				g.AddFloatingText("-10 HP", g.player.x, g.player.y, color.RGBA{255, 0, 0, 255}) // Red text for damage
 			}
 		}
 	}
