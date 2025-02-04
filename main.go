@@ -151,11 +151,14 @@ type Bullet struct {
 }
 
 type Enemy struct {
-	x, y      float64
-	sprites   *SpritePack
-	hp        int
-	attacking time.Time
-	done      chan bool
+	x, y                float64
+	sprites             *SpritePack
+	hp                  int
+	attacking           time.Time
+	lastIntentionChange time.Time
+	speed               float64
+	dx, dy              float64
+	done                chan bool
 }
 
 var enemyTypes = []string{"Slime2", "Slime3"}
@@ -168,57 +171,45 @@ func NewEnemy(slimeName string, startX, startY float64) *Enemy {
 		hp:      100,
 		done:    make(chan bool),
 	}
-	go e.RandomMovement()
 	return e
 
 }
 
 func (e *Enemy) RandomMovement() {
-	ticker := time.NewTicker(1000 * time.Millisecond) // Change direction every 500ms
-	defer ticker.Stop()
+	if e.hp < 1 {
+		return
+	}
+	// Randomly change direction
+	if time.Since(e.lastIntentionChange) > time.Second*3 {
+		angle := rand.Float64() * 2 * math.Pi
+		e.dx = math.Cos(angle)
+		e.dy = math.Sin(angle)
+		e.lastIntentionChange = time.Now()
 
-	var dx, dy float64
-	for {
-		select {
-		case <-e.done:
-			return
-		case <-ticker.C:
-			// Randomly change direction
-			angle := rand.Float64() * 2 * math.Pi
-			dx = math.Cos(angle)
-			dy = math.Sin(angle)
-			if rand.Intn(100) > 50 {
-				e.attacking = time.Now().Add(time.Second * 2)
-			}
-		default:
-			// Stop moving if HP is less than 1
-			if e.hp < 1 {
-				return
-			}
-
-			// Move the enemy
-			e.x += dx * 1 // Adjust speed as needed
-			e.y += dy * 1 // Adjust speed as needed
-
-			// Ensure the enemy stays within bounds
-			if e.x < 0 {
-				e.x = 0
-				dx = -dx
-			} else if e.x > float64(screenWidth) {
-				e.x = float64(screenWidth)
-				dx = -dx
-			}
-
-			if e.y < 0 {
-				e.y = 0
-				dy = -dy
-			} else if e.y > float64(screenHeight) {
-				e.y = float64(screenHeight)
-				dy = -dy
-			}
-
-			time.Sleep(16 * time.Millisecond) // Roughly 60 updates per second
+		if rand.Intn(100) > 50 {
+			e.attacking = time.Now().Add(time.Second * 2)
 		}
+	}
+
+	// Move the enemy
+	e.x += e.dx * 1 // Adjust speed as needed
+	e.y += e.dy * 1 // Adjust speed as needed
+
+	// Ensure the enemy stays within bounds
+	if e.x < 0 {
+		e.x = 0
+		e.dx = -e.dx
+	} else if e.x > float64(screenWidth) {
+		e.x = float64(screenWidth)
+		e.dx = -e.dx
+	}
+
+	if e.y < 0 {
+		e.y = 0
+		e.dy = -e.dy
+	} else if e.y > float64(screenHeight) {
+		e.y = float64(screenHeight)
+		e.dy = -e.dy
 	}
 }
 
@@ -545,6 +536,10 @@ func (g *Game) Update() error {
 		}
 	}
 	g.bullets = activeBullets
+
+	for _, enemy := range g.enemies {
+		enemy.RandomMovement()
+	}
 
 	// Check for bullet collisions with enemies
 	g.checkBulletCollisions()
