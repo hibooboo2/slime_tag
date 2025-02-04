@@ -171,44 +171,70 @@ type Bullet struct {
 	hp           int
 }
 
+type Intention int
+
+const (
+	Idle Intention = iota
+	Attack
+	Chase
+)
+
 type Enemy struct {
 	x, y                float64
 	sprites             *SpritePack
 	hpBar               *HPBar
 	attacking           time.Time
 	lastIntentionChange time.Time
+	intention           Intention
 	speed               float64
 	dx, dy              float64
 	done                chan bool
 }
 
-var enemyTypes = []string{"Slime2", "Slime3"}
+var enemyTypes = []string{
+	"Slime2",
+	// "Slime3",
+}
 
 func NewEnemy(slimeName string, startX, startY float64) *Enemy {
 	e := &Enemy{
-		x:       startX,
-		y:       startY,
-		sprites: NewSpritePack(slimeName),
-		hpBar:   NewHPBar(100),
-		done:    make(chan bool),
+		x:         startX,
+		y:         startY,
+		sprites:   NewSpritePack(slimeName),
+		intention: Idle,
+		hpBar:     NewHPBar(100),
+		done:      make(chan bool),
 	}
 	return e
 }
 
-func (e *Enemy) RandomMovement() {
+func (e *Enemy) RandomMovement(playerX, playerY float64) {
 	if e.hpBar.currentHP < 1 {
 		return
 	}
 	// Randomly change direction
 	if time.Since(e.lastIntentionChange) > time.Second*3 {
-		angle := rand.Float64() * 2 * math.Pi
-		e.dx = math.Cos(angle)
-		e.dy = math.Sin(angle)
-		e.lastIntentionChange = time.Now()
 
-		if rand.Intn(100) > 50 {
+		switch {
+		case rand.Intn(100) > 40:
+			e.intention = Attack
 			e.attacking = time.Now().Add(time.Second * 2)
+		case rand.Intn(100) > 15:
+			// Change direction towards the player
+			e.intention = Chase
+			dx := playerX - e.x
+			dy := playerY - e.y
+			length := math.Sqrt(dx*dx + dy*dy)
+			e.dx = dx / length
+			e.dy = dy / length
+		default:
+			e.intention = Idle
+			angle := rand.Float64() * 2 * math.Pi
+			e.dx = math.Cos(angle)
+			e.dy = math.Sin(angle)
+			e.lastIntentionChange = time.Now()
 		}
+
 	}
 
 	// Move the enemy
@@ -234,7 +260,7 @@ func (e *Enemy) RandomMovement() {
 }
 
 type PowerUp struct {
-	icon      string
+	icon      *AnimatedSprite
 	x, y      float64
 	spawnTime time.Time
 	bonus     int
@@ -501,9 +527,11 @@ func (g *Game) checkPlayerCollisionsAndAffects() {
 		if playerRect.Overlaps(powerUpRect) {
 			switch powerUp.bonus {
 			case 0:
-				g.player.hp += 20
+				g.player.hpBar.currentHP += 20
+				g.player.hpBar.visible = true
 			case 1:
-				g.player.hp -= 10
+				g.player.hpBar.currentHP -= 10
+				g.player.hpBar.visible = true
 			}
 		} else {
 			newPowerUps = append(newPowerUps, powerUp)
@@ -600,7 +628,7 @@ func (g *Game) Update() error {
 	g.bullets = activeBullets
 
 	for _, enemy := range g.enemies {
-		enemy.RandomMovement()
+		enemy.RandomMovement(g.player.x, g.player.y)
 	}
 
 	// Update HP bar visibility
@@ -649,11 +677,11 @@ func (g *Game) Update() error {
 
 	if time.Since(g.lastPowerUpSpawn) >= 10*time.Second {
 		g.powerUps = append(g.powerUps, &PowerUp{
-			icon:      "❤️",
+			icon:      NewSprite(fmt.Sprintf("slimes/PNG/%[1]s/Idle/%[1]s_Idle_full.png", "Slime3"), 6),
 			x:         float64(rand.Intn(screenWidth)),
 			y:         float64(rand.Intn(screenHeight)),
 			spawnTime: time.Now(),
-			bonus:     0,
+			bonus:     rand.Intn(2),
 		})
 
 		g.lastPowerUpSpawn = time.Now()
@@ -803,7 +831,10 @@ func (g *Game) drawGameView(screen *ebiten.Image) {
 	// Draw power-ups
 	for _, powerUp := range g.powerUps {
 		// Draw the power-up icon at its location
-		text.Draw(screen, powerUp.icon, gameFont, int(powerUp.x), int(powerUp.y), color.White)
+		op := &ebiten.DrawImageOptions{}
+		op.GeoM.Translate(powerUp.x, powerUp.y)
+		_, img := powerUp.icon.GetCurrentSprite(g.frameCount, 0)
+		screen.DrawImage(img, op)
 	}
 }
 
