@@ -266,6 +266,52 @@ type PowerUp struct {
 	bonus     int
 }
 
+type FloatingText struct {
+	text      string
+	x, y      float64
+	color     color.Color
+	startTime time.Time
+	duration  time.Duration
+	opacity   float64
+}
+
+func NewFloatingText(text string, x, y float64, color color.Color) *FloatingText {
+	return &FloatingText{
+		text:      text,
+		x:         x,
+		y:         y,
+		color:     color,
+		startTime: time.Now(),
+		duration:  2 * time.Second,
+		opacity:   1.0,
+	}
+}
+
+func (ft *FloatingText) Update() {
+	elapsed := time.Since(ft.startTime)
+	if elapsed > ft.duration {
+		ft.opacity = 0
+		return
+	}
+
+	// Calculate the new opacity and position
+	ft.opacity = 1 - float64(elapsed)/float64(ft.duration)
+	ft.y += 0.5 // Move downward slowly
+}
+
+func (ft *FloatingText) Draw(screen *ebiten.Image) {
+	if ft.opacity <= 0 {
+		return
+	}
+
+	// Set the color with the current opacity
+	r, g, b, _ := ft.color.RGBA()
+	clr := color.RGBA{uint8(r), uint8(g), uint8(b), uint8(255 * ft.opacity)}
+
+	// Draw the text
+	text.Draw(screen, ft.text, gameFont, int(ft.x), int(ft.y), clr)
+}
+
 type Game struct {
 	menuOptions      []string
 	selected         int
@@ -287,6 +333,7 @@ type Game struct {
 	scaleFactor      float32       // Add this line to define scaleFactor
 	powerUps         []*PowerUp
 	lastPowerUpSpawn time.Time // Add this line to track the last power-up spawn time
+	floatingTexts    []*FloatingText
 }
 
 type KeyEvent struct {
@@ -529,9 +576,12 @@ func (g *Game) checkPlayerCollisionsAndAffects() {
 			case 0:
 				g.player.hpBar.currentHP += 20
 				g.player.hpBar.visible = true
+				g.AddFloatingText("+20 HP", float64(powerUp.x), float64(powerUp.y), color.RGBA{0, 255, 0, 255})
 			case 1:
 				g.player.hpBar.currentHP -= 10
 				g.player.hpBar.visible = true
+				g.AddFloatingText("-10 HP", float64(powerUp.x), float64(powerUp.y), color.RGBA{255, 0, 0, 255})
+
 			}
 		} else {
 			newPowerUps = append(newPowerUps, powerUp)
@@ -677,15 +727,30 @@ func (g *Game) Update() error {
 
 	if time.Since(g.lastPowerUpSpawn) >= 10*time.Second {
 		g.powerUps = append(g.powerUps, &PowerUp{
-			icon:      NewSprite(fmt.Sprintf("slimes/PNG/%[1]s/Idle/%[1]s_Idle_full.png", "Slime3"), 6),
 			x:         float64(rand.Intn(screenWidth)),
 			y:         float64(rand.Intn(screenHeight)),
 			spawnTime: time.Now(),
 			bonus:     rand.Intn(2),
 		})
+		switch g.powerUps[len(g.powerUps)-1].bonus {
+		case 0:
+			g.powerUps[len(g.powerUps)-1].icon = NewSprite(fmt.Sprintf("slimes/PNG/%[1]s/Idle/%[1]s_Idle_full.png", "Slime3"), 6)
+		case 1:
+			g.powerUps[len(g.powerUps)-1].icon = NewSprite(fmt.Sprintf("slimes/PNG/%[1]s/Attack/%[1]s_Attack_full.png", "Slime3"), 10)
+		}
 
 		g.lastPowerUpSpawn = time.Now()
 	}
+
+	// Update floating texts
+	var activeTexts []*FloatingText
+	for _, ft := range g.floatingTexts {
+		ft.Update()
+		if ft.opacity > 0 {
+			activeTexts = append(activeTexts, ft)
+		}
+	}
+	g.floatingTexts = activeTexts
 
 	return nil
 }
@@ -835,6 +900,11 @@ func (g *Game) drawGameView(screen *ebiten.Image) {
 		op.GeoM.Translate(powerUp.x, powerUp.y)
 		_, img := powerUp.icon.GetCurrentSprite(g.frameCount, 0)
 		screen.DrawImage(img, op)
+	}
+
+	// Draw floating texts
+	for _, ft := range g.floatingTexts {
+		ft.Draw(screen)
 	}
 }
 
@@ -1099,4 +1169,8 @@ func (bar *HPBar) updateOpacity() {
 	if timeSinceLastDamage > 5*time.Second {
 		bar.visible = false
 	}
+}
+
+func (g *Game) AddFloatingText(text string, x, y float64, color color.Color) {
+	g.floatingTexts = append(g.floatingTexts, NewFloatingText(text, x, y, color))
 }
