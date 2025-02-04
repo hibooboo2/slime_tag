@@ -1,13 +1,17 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"image"
 	"image/color"
 	"log"
 	"math"
 	"math/rand"
+	"os"
 	"slices"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/hajimehoshi/ebiten/v2"
@@ -390,11 +394,15 @@ func (g *Game) handleKeys() {
 			case ebiten.KeyEnter:
 				screenWidth, screenHeight := parseResolution(g.resolutionOptions[g.selected])
 				g.addDebugLog(fmt.Sprintf("Setting resolution to %d x %d", screenWidth, screenHeight))
+				log.Println("resolution changed", screenWidth, screenHeight)
 				ebiten.SetWindowSize(screenWidth, screenHeight)
 				ebiten.SetFullscreen(true)
+				SaveSettings("~/.slime_tag_settings.json")
+				g.exit = true
 			case ebiten.KeyEscape:
 				g.settings = false
 				g.inMainMenu = true
+
 			}
 		case g.inMainMenu:
 			switch event.Key {
@@ -429,9 +437,14 @@ func (g *Game) handleKeys() {
 			case ebiten.KeyEscape:
 				g.settings = false
 				g.inMainMenu = true
+			case ebiten.KeyR:
+				if g.gameOver {
+					g.resetGame() // Restart the game if it's over
+				}
 			}
 		}
 	}
+
 }
 
 func (g *Game) handleGamepadInput() bool {
@@ -739,6 +752,8 @@ func (g *Game) Update() error {
 
 	if g.player.hpBar.currentHP <= 0 {
 		g.gameOver = true // Set game over state when player dies
+		g.addDebugLog("Game Over")
+		g.AddFloatingText("Game Over", g.player.x, g.player.y, color.RGBA{255, 0, 0, 255})
 	}
 
 	// Initialize spawn interval if it's zero
@@ -949,7 +964,7 @@ func (g *Game) setDebugLogFirstSlot(log string) {
 
 func (g *Game) addDebugLog(log string) {
 	if len(g.debugLogs) >= 10 {
-		g.debugLogs = g.debugLogs[2:]
+		g.debugLogs = g.debugLogs[1:]
 	}
 	g.debugLogs = append(g.debugLogs, log)
 }
@@ -961,7 +976,7 @@ func (g *Game) drawDebugLogs(screen *ebiten.Image) {
 	width, height := x/3, y/3 // Adjusted size
 
 	// Draw a semi-transparent background for the debug logs
-	vector.DrawFilledRect(screen, float32(x)-float32(width), float32(y)-float32(height), float32(width), float32(height), color.RGBA{0, 0, 0, 128}, true)
+	vector.DrawFilledRect(screen, float32(x)-float32(width), float32(y)-float32(height), float32(width), float32(height), color.RGBA{100, 0, 223, 128}, true)
 
 	// Print each log line with smaller text
 	for i, log := range g.debugLogs {
@@ -1156,10 +1171,14 @@ func main() {
 	// Get the maximum screen size for the primary monitor
 	screenWidth, screenHeight = GetMaxScreenSize()
 
+	if err := LoadSettings("~/.slime_tag_settings.json"); err != nil {
+		ebiten.SetWindowSize(screenWidth, screenHeight)
+		ebiten.SetWindowTitle("Basic Game Menu")
+		ebiten.SetFullscreen(true)
+	}
+	log.Println("screenWidth", screenWidth, "screenHeight", screenHeight)
+
 	// Set the window size to the maximum screen size
-	ebiten.SetWindowSize(screenWidth, screenHeight)
-	ebiten.SetWindowTitle("Basic Game Menu")
-	ebiten.SetFullscreen(true)
 
 	rand.Seed(time.Now().UnixNano())
 
@@ -1201,48 +1220,51 @@ func main() {
 	}
 }
 
-func NewHPBar(maxHP int) *HPBar {
-	return &HPBar{
-		lastDamageTime: time.Time{}, // Initialize to zero time
-		currentOpacity: 0.0,         // Start invisible
-		maxHP:          maxHP,
-		currentHP:      maxHP,
-		visible:        false, // Start hidden
-	}
-}
-
-func (bar *HPBar) updateOpacity() {
-	timeSinceLastDamage := time.Since(bar.lastDamageTime)
-	if timeSinceLastDamage > 5*time.Second {
-		bar.visible = false
-	}
-}
-
 func (g *Game) AddFloatingText(text string, x, y float64, color color.Color) {
 	g.floatingTexts = append(g.floatingTexts, NewFloatingText(text, x, y, color))
 }
 
-func NewRandomPowerUp() *PowerUp {
-	p := &PowerUp{
-		x:         float64(rand.Intn(screenWidth)),
-		y:         float64(rand.Intn(screenHeight)),
-		spawnTime: time.Now(),
-		bonus:     rand.Intn(2),
-	}
-	switch p.bonus {
-	case 0:
-		p.icon = NewSprite(fmt.Sprintf("slimes/PNG/%[1]s/Idle/%[1]s_Idle_full.png", "Slime3"), 6)
-	case 1:
-		p.icon = NewSprite(fmt.Sprintf("slimes/PNG/%[1]s/Attack/%[1]s_Attack_full.png", "Slime3"), 10)
-	}
-	return p
+type Settings struct {
+	Resolution string `json:"resolution"`
+	Fullscreen bool   `json:"fullscreen"`
+	// Add other settings as needed
 }
 
-func (bar *HPBar) AddHP(amount int) {
-	bar.currentHP += amount
-	bar.lastDamageTime = time.Now()
-	bar.visible = true
-	if bar.currentHP > bar.maxHP {
-		bar.currentHP = bar.maxHP
+func SaveSettings(filePath string) error {
+	settings := Settings{
+		Resolution: fmt.Sprintf("%dx%d", screenWidth, screenHeight),
+		Fullscreen: true, // Assuming fullscreen is enabled
+		// Add other settings as needed
 	}
+
+	data, err := json.MarshalIndent(settings, "", "  ")
+	if err != nil {
+		return err
+	}
+
+	return os.WriteFile(filePath, data, 0644)
+}
+
+func LoadSettings(filePath string) error {
+	data, err := os.ReadFile(filePath)
+	if err != nil {
+		return err
+	}
+
+	var settings Settings
+	if err := json.Unmarshal(data, &settings); err != nil {
+		return err
+	}
+
+	// Update game settings
+	resolution := strings.Split(settings.Resolution, "x")
+	if len(resolution) == 2 {
+		width, _ := strconv.Atoi(resolution[0])
+		height, _ := strconv.Atoi(resolution[1])
+		screenWidth, screenHeight = width, height
+		ebiten.SetWindowSize(screenWidth, screenHeight)
+		ebiten.SetFullscreen(settings.Fullscreen)
+	}
+
+	return nil
 }
