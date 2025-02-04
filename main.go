@@ -183,11 +183,11 @@ type Enemy struct {
 	x, y                float64
 	sprites             *SpritePack
 	hpBar               *HPBar
-	attacking           time.Time
 	lastIntentionChange time.Time
 	intention           Intention
 	speed               float64
 	dx, dy              float64
+	movementAngle       float32
 	done                chan bool
 }
 
@@ -213,28 +213,28 @@ func (e *Enemy) RandomMovement(playerX, playerY float64) {
 		return
 	}
 	// Randomly change direction
-	if time.Since(e.lastIntentionChange) > time.Second*3 {
-
+	if time.Since(e.lastIntentionChange) > time.Duration(rand.Intn(3000)+1000)*time.Millisecond {
 		switch {
 		case rand.Intn(100) > 40:
 			e.intention = Attack
-			e.attacking = time.Now().Add(time.Second * 2)
 		case rand.Intn(100) > 15:
 			// Change direction towards the player
 			e.intention = Chase
 			dx := playerX - e.x
 			dy := playerY - e.y
 			length := math.Sqrt(dx*dx + dy*dy)
-			e.dx = dx / length
-			e.dy = dy / length
+			e.dx = (dx / length) * 2
+			e.dy = (dy / length) * 2
+			e.movementAngle = float32(math.Atan2(float64(dy), float64(dx)) * (180 / math.Pi))
 		default:
 			e.intention = Idle
 			angle := rand.Float64() * 2 * math.Pi
+			e.movementAngle = float32(angle)
 			e.dx = math.Cos(angle)
 			e.dy = math.Sin(angle)
-			e.lastIntentionChange = time.Now()
-		}
 
+		}
+		e.lastIntentionChange = time.Now()
 	}
 
 	// Move the enemy
@@ -537,7 +537,7 @@ func (g *Game) checkPlayerCollisionsAndAffects() {
 		if enemy.hpBar.currentHP <= 1 {
 			continue
 		}
-		if enemy.attacking.After(time.Now()) {
+		if enemy.intention == Attack {
 			// Define the player's bounding rectangle
 			playerRect := image.Rect(
 				int(g.player.x)-16, int(g.player.y)-16,
@@ -736,6 +736,13 @@ func (g *Game) Update() error {
 		g.lastPowerUpSpawn = time.Now()
 	}
 
+	newPowerUps := []*PowerUp{}
+	for _, powerUp := range g.powerUps {
+		if time.Since(powerUp.spawnTime) > time.Second*10 {
+			newPowerUps = append(newPowerUps, powerUp)
+		}
+	}
+	g.powerUps = newPowerUps
 	// Update floating texts
 	var activeTexts []*FloatingText
 	for _, ft := range g.floatingTexts {
@@ -865,14 +872,19 @@ func (g *Game) drawGameView(screen *ebiten.Image) {
 			sprite = enemy.sprites.death
 		case enemy.hpBar.currentHP <= 50:
 			sprite = enemy.sprites.hurt
-		case enemy.attacking.After(time.Now()):
-			sprite = enemy.sprites.attack
 		default:
-			sprite = enemy.sprites.idle
+			switch enemy.intention {
+			case Idle:
+				sprite = enemy.sprites.idle
+			case Chase:
+				sprite = enemy.sprites.run
+			case Attack:
+				sprite = enemy.sprites.attack
+			}
 		}
 
 		//XXX Death animation is not working
-		isDone, subImage := sprite.GetCurrentSprite(g.frameCount, 0)
+		isDone, subImage := sprite.GetCurrentSprite(g.frameCount, enemy.movementAngle)
 		if !(enemy.hpBar.currentHP <= 0 && isDone) {
 			newEnemies = append(newEnemies, enemy)
 		}
