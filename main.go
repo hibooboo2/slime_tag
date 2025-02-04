@@ -505,13 +505,23 @@ func (g *Game) checkEnemyBulletCollisions() {
 				enemy.hpBar.lastDamageTime = time.Now()
 				enemy.hpBar.visible = true
 				if enemy.hpBar.currentHP <= 0 {
-					g.enemiesKilled++ // Increment the enemies killed count
+					g.enemiesKilled++                                                              // Increment the enemies killed count
+					g.AddFloatingText("+5 HP", g.player.x, g.player.y, color.RGBA{0, 255, 0, 255}) // Add healing text
+					g.player.hpBar.currentHP += 5                                                  // Heal the player
+					if g.player.hpBar.currentHP > g.player.hpBar.maxHP {
+						g.player.hpBar.currentHP = g.player.hpBar.maxHP // Cap the HP at max
+					}
 					// Reduce spawn interval by 15ms per kill, with a minimum of 100ms
 					enemySpawnRate := g.spawnInterval - (50 * time.Millisecond)
 					if enemySpawnRate < 100*time.Millisecond {
 						enemySpawnRate = 100 * time.Millisecond
 					}
 					g.spawnInterval = enemySpawnRate
+
+					// Spawn a power-up every 5 enemies killed
+					if g.enemiesKilled%5 == 0 {
+						g.powerUps = append(g.powerUps, NewRandomPowerUp())
+					}
 				}
 				collided = true
 				break
@@ -578,13 +588,14 @@ func (g *Game) checkPlayerCollisionsAndAffects() {
 			switch powerUp.bonus {
 			case 0:
 				g.player.hpBar.currentHP += 20
+				g.player.hpBar.lastDamageTime = time.Now()
 				g.player.hpBar.visible = true
 				g.AddFloatingText("+20 HP", float64(powerUp.x), float64(powerUp.y), color.RGBA{0, 255, 0, 255})
 			case 1:
 				g.player.hpBar.currentHP -= 10
+				g.player.hpBar.lastDamageTime = time.Now()
 				g.player.hpBar.visible = true
 				g.AddFloatingText("-10 HP", float64(powerUp.x), float64(powerUp.y), color.RGBA{255, 0, 0, 255})
-
 			}
 		} else {
 			newPowerUps = append(newPowerUps, powerUp)
@@ -729,19 +740,8 @@ func (g *Game) Update() error {
 	}
 
 	if time.Since(g.lastPowerUpSpawn) >= 10*time.Second {
-		g.powerUps = append(g.powerUps, &PowerUp{
-			x:         float64(rand.Intn(screenWidth)),
-			y:         float64(rand.Intn(screenHeight)),
-			spawnTime: time.Now(),
-			bonus:     rand.Intn(2),
-		})
-		switch g.powerUps[len(g.powerUps)-1].bonus {
-		case 0:
-			g.powerUps[len(g.powerUps)-1].icon = NewSprite(fmt.Sprintf("slimes/PNG/%[1]s/Idle/%[1]s_Idle_full.png", "Slime3"), 6)
-		case 1:
-			g.powerUps[len(g.powerUps)-1].icon = NewSprite(fmt.Sprintf("slimes/PNG/%[1]s/Attack/%[1]s_Attack_full.png", "Slime3"), 10)
-		}
-
+		p := NewRandomPowerUp()
+		g.powerUps = append(g.powerUps, p)
 		g.lastPowerUpSpawn = time.Now()
 	}
 
@@ -1176,4 +1176,20 @@ func (bar *HPBar) updateOpacity() {
 
 func (g *Game) AddFloatingText(text string, x, y float64, color color.Color) {
 	g.floatingTexts = append(g.floatingTexts, NewFloatingText(text, x, y, color))
+}
+
+func NewRandomPowerUp() *PowerUp {
+	p := &PowerUp{
+		x:         float64(rand.Intn(screenWidth)),
+		y:         float64(rand.Intn(screenHeight)),
+		spawnTime: time.Now(),
+		bonus:     rand.Intn(2),
+	}
+	switch p.bonus {
+	case 0:
+		p.icon = NewSprite(fmt.Sprintf("slimes/PNG/%[1]s/Idle/%[1]s_Idle_full.png", "Slime3"), 6)
+	case 1:
+		p.icon = NewSprite(fmt.Sprintf("slimes/PNG/%[1]s/Attack/%[1]s_Attack_full.png", "Slime3"), 10)
+	}
+	return p
 }
