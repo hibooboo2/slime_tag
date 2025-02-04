@@ -1086,11 +1086,11 @@ func main() {
 
 func NewHPBar(maxHP int) *HPBar {
 	return &HPBar{
-		lastDamageTime: time.Now(),
-		currentOpacity: 1.0,
+		lastDamageTime: time.Time{}, // Initialize to zero time
+		currentOpacity: 0.0,         // Start invisible
 		maxHP:          maxHP,
 		currentHP:      maxHP,
-		visible:        true,
+		visible:        false, // Start hidden
 	}
 }
 
