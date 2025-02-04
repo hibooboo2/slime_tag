@@ -313,27 +313,28 @@ func (ft *FloatingText) Draw(screen *ebiten.Image) {
 }
 
 type Game struct {
-	menuOptions      []string
-	selected         int
-	inMenu           bool
-	keys             *Keys
-	exit             bool
-	player           *Player
-	debugLogs        []string
-	lastLogTime      time.Time
-	settings         bool
-	bullets          []*Bullet
-	frameCount       int // Add a frame counter
-	gamepads         []ebiten.GamepadID
-	enemies          []*Enemy      // Add a slice to hold enemies
-	enemiesKilled    int           // Add a field to track the number of enemies killed
-	gameOver         bool          // Add a field to track if the game is over
-	lastEnemySpawn   time.Time     // Track when we last spawned an enemy
-	spawnInterval    time.Duration // Current interval between enemy spawns
-	scaleFactor      float32       // Add this line to define scaleFactor
-	powerUps         []*PowerUp
-	lastPowerUpSpawn time.Time // Add this line to track the last power-up spawn time
-	floatingTexts    []*FloatingText
+	menuOptions       []string
+	resolutionOptions []string
+	selected          int
+	inMainMenu        bool
+	keys              *Keys
+	exit              bool
+	player            *Player
+	debugLogs         []string
+	lastLogTime       time.Time
+	settings          bool
+	bullets           []*Bullet
+	frameCount        int // Add a frame counter
+	gamepads          []ebiten.GamepadID
+	enemies           []*Enemy      // Add a slice to hold enemies
+	enemiesKilled     int           // Add a field to track the number of enemies killed
+	gameOver          bool          // Add a field to track if the game is over
+	lastEnemySpawn    time.Time     // Track when we last spawned an enemy
+	spawnInterval     time.Duration // Current interval between enemy spawns
+	scaleFactor       float32       // Add this line to define scaleFactor
+	powerUps          []*PowerUp
+	lastPowerUpSpawn  time.Time // Add this line to track the last power-up spawn time
+	floatingTexts     []*FloatingText
 }
 
 type KeyEvent struct {
@@ -379,31 +380,55 @@ func (k *Keys) Update() {
 
 func (g *Game) handleKeys() {
 	for event := range g.keys.eventChan {
-		switch event.Key {
-		case ebiten.KeyArrowDown:
-			g.selected = (g.selected + 1) % len(g.menuOptions)
-		case ebiten.KeyArrowUp:
-			g.selected = (g.selected - 1 + len(g.menuOptions)) % len(g.menuOptions)
-		case ebiten.KeyEnter:
-			switch g.menuOptions[g.selected] {
-			case "Start Game":
-				g.inMenu = false
-				if g.gameOver {
-					g.resetGame()
-				}
-			case "Exit":
-				g.exit = true
-			case "Settings":
-				g.inMenu = false
-				g.settings = true
+		switch {
+		case g.settings:
+			switch event.Key {
+			case ebiten.KeyArrowDown:
+				g.selected = (g.selected + 1) % len(g.resolutionOptions)
+			case ebiten.KeyArrowUp:
+				g.selected = (g.selected - 1 + len(g.resolutionOptions)) % len(g.resolutionOptions)
+			case ebiten.KeyEnter:
+				screenWidth, screenHeight := parseResolution(g.resolutionOptions[g.selected])
+				g.addDebugLog(fmt.Sprintf("Setting resolution to %d x %d", screenWidth, screenHeight))
+				ebiten.SetWindowSize(screenWidth, screenHeight)
+				ebiten.SetFullscreen(true)
+			case ebiten.KeyEscape:
+				g.settings = false
+				g.inMainMenu = true
 			}
+		case g.inMainMenu:
+			switch event.Key {
+			case ebiten.KeyArrowDown:
+				g.selected = (g.selected + 1) % len(g.menuOptions)
+			case ebiten.KeyArrowUp:
+				g.selected = (g.selected - 1 + len(g.menuOptions)) % len(g.menuOptions)
+			case ebiten.KeyEnter:
+				switch g.menuOptions[g.selected] {
+				case "Start Game":
+					g.inMainMenu = false
+					if g.gameOver {
+						g.resetGame()
+					}
+				case "Exit":
+					g.exit = true
+				case "Settings":
+					g.inMainMenu = false
+					g.settings = true
+				}
 
-		case ebiten.KeyEscape:
-			g.settings = false
-			g.inMenu = true
-		case ebiten.KeyR:
-			if g.gameOver {
-				g.resetGame() // Restart the game if it's over
+			case ebiten.KeyEscape:
+				g.settings = false
+				g.inMainMenu = true
+			case ebiten.KeyR:
+				if g.gameOver {
+					g.resetGame() // Restart the game if it's over
+				}
+			}
+		default:
+			switch event.Key {
+			case ebiten.KeyEscape:
+				g.settings = false
+				g.inMainMenu = true
 			}
 		}
 	}
@@ -419,21 +444,21 @@ func (g *Game) handleGamepadInput() bool {
 			continue
 		}
 		// Handle menu navigation
-		if g.inMenu {
+		if g.inMainMenu {
 			if ebiten.IsGamepadButtonPressed(id, ebiten.GamepadButton0) { // A button
 				switch g.menuOptions[g.selected] {
 				case "Start Game":
-					g.inMenu = false
+					g.inMainMenu = false
 				case "Exit":
 					g.exit = true
 				case "Settings":
-					g.inMenu = false
+					g.inMainMenu = false
 					g.settings = true
 				}
 			}
 			if ebiten.IsGamepadButtonPressed(id, ebiten.GamepadButton1) { // B button
 				g.settings = false
-				g.inMenu = true
+				g.inMainMenu = true
 			}
 			if ebiten.IsGamepadButtonPressed(id, ebiten.GamepadButton13) { // D-pad down
 				g.selected = (g.selected + 1) % len(g.menuOptions)
@@ -602,7 +627,7 @@ func (g *Game) Update() error {
 	g.keys.Update()
 	isConnected := g.handleGamepadInput()
 
-	if g.inMenu {
+	if g.inMainMenu {
 
 	} else if !isConnected {
 		if g.gameOver {
@@ -852,7 +877,7 @@ func (g *Game) drawGameView(screen *ebiten.Image) {
 	isDone, currentPlayerSprite := sprite.GetCurrentSprite(g.frameCount, g.player.movementAngle)
 	defer screen.DrawImage(currentPlayerSprite, op)
 	if g.player.hpBar.currentHP <= 0 && isDone {
-		g.inMenu = true
+		g.inMainMenu = true
 		g.player.hpBar.currentHP = 100
 	}
 
@@ -948,7 +973,19 @@ func (g *Game) drawSettings(screen *ebiten.Image) {
 	// Example settings screen drawing logic
 	screen.Fill(color.RGBA{50, 50, 50, 255}) // Dark gray background
 	ebitenutil.DebugPrintAt(screen, "Settings", 20, 20)
-	// Add more settings UI elements as needed
+
+	// Dropdown box variables
+	dropdownWidth := 200
+	dropdownHeight := 30
+	dropdownX := (screenWidth - dropdownWidth) / 2
+	dropdownY := screenHeight / 2
+
+	// Draw the dropdown box background
+	vector.DrawFilledRect(screen, float32(dropdownX), float32(dropdownY), float32(dropdownWidth), float32(dropdownHeight), color.RGBA{255, 255, 255, 255}, true)
+
+	// Draw the selected option
+	selectedOption := g.resolutionOptions[g.selected] // Assuming g.selected is used to track the selected option
+	ebitenutil.DebugPrintAt(screen, selectedOption, dropdownX+10, dropdownY+5)
 }
 
 func (g *Game) drawGameOver(screen *ebiten.Image) {
@@ -1050,7 +1087,7 @@ func drawStatusBox(screen *ebiten.Image, screenWidth, screenHeight int, enemies,
 func (g *Game) Draw(screen *ebiten.Image) {
 	defer g.drawDebugLogs(screen)
 
-	if g.inMenu {
+	if g.inMainMenu {
 		g.drawMenu(screen)
 		return
 	}
@@ -1137,13 +1174,14 @@ func main() {
 	game := &Game{
 		menuOptions: []string{"Start Game", "Settings", "Fun Stuff", "Exit"},
 		selected:    0,
-		inMenu:      false,
+		inMainMenu:  false,
 		keys:        NewKeys(),
 		player:      p,
 		debugLogs:   []string{},
 		lastLogTime: time.Now(), // Initialize the last log time
 		scaleFactor: 1.0,        // Initialize scaleFactor with a default value
 	}
+	game.resolutionOptions = GetTopResolutions(screenWidth, screenHeight)
 
 	// Example of adding an enemy
 
