@@ -507,10 +507,7 @@ func (g *Game) checkEnemyBulletCollisions() {
 				if enemy.hpBar.currentHP <= 0 {
 					g.enemiesKilled++                                                              // Increment the enemies killed count
 					g.AddFloatingText("+5 HP", g.player.x, g.player.y, color.RGBA{0, 255, 0, 255}) // Add healing text
-					g.player.hpBar.currentHP += 5                                                  // Heal the player
-					if g.player.hpBar.currentHP > g.player.hpBar.maxHP {
-						g.player.hpBar.currentHP = g.player.hpBar.maxHP // Cap the HP at max
-					}
+					g.player.hpBar.AddHP(5)
 					// Reduce spawn interval by 15ms per kill, with a minimum of 100ms
 					enemySpawnRate := g.spawnInterval - (50 * time.Millisecond)
 					if enemySpawnRate < 100*time.Millisecond {
@@ -557,9 +554,7 @@ func (g *Game) checkPlayerCollisionsAndAffects() {
 			// Check for collision
 			if playerRect.Overlaps(enemyRect) {
 				// Damage the player
-				g.player.hpBar.currentHP -= 10
-				g.player.hpBar.lastDamageTime = time.Now()
-				g.player.hpBar.visible = true
+				g.player.hpBar.AddHP(-10)
 
 				// Add floating text for damage
 				g.AddFloatingText("-10 HP", g.player.x, g.player.y, color.RGBA{255, 0, 0, 255}) // Red text for damage
@@ -587,14 +582,10 @@ func (g *Game) checkPlayerCollisionsAndAffects() {
 		if playerRect.Overlaps(powerUpRect) {
 			switch powerUp.bonus {
 			case 0:
-				g.player.hpBar.currentHP += 20
-				g.player.hpBar.lastDamageTime = time.Now()
-				g.player.hpBar.visible = true
+				g.player.hpBar.AddHP(20)
 				g.AddFloatingText("+20 HP", float64(powerUp.x), float64(powerUp.y), color.RGBA{0, 255, 0, 255})
 			case 1:
-				g.player.hpBar.currentHP -= 10
-				g.player.hpBar.lastDamageTime = time.Now()
-				g.player.hpBar.visible = true
+				g.player.hpBar.AddHP(-10)
 				g.AddFloatingText("-10 HP", float64(powerUp.x), float64(powerUp.y), color.RGBA{255, 0, 0, 255})
 			}
 		} else {
@@ -1192,4 +1183,13 @@ func NewRandomPowerUp() *PowerUp {
 		p.icon = NewSprite(fmt.Sprintf("slimes/PNG/%[1]s/Attack/%[1]s_Attack_full.png", "Slime3"), 10)
 	}
 	return p
+}
+
+func (bar *HPBar) AddHP(amount int) {
+	bar.currentHP += amount
+	bar.lastDamageTime = time.Now()
+	bar.visible = true
+	if bar.currentHP > bar.maxHP {
+		bar.currentHP = bar.maxHP
+	}
 }
