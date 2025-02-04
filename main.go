@@ -109,7 +109,7 @@ func NewPlayer(playerType string, spritePack *SpritePack) (*Player, error) {
 }
 
 func (sprite *AnimatedSprite) GetCurrentSprite(frameCount int, movementAngle float32) (bool, *ebiten.Image) {
-	if frameCount%5 == 0 {
+	if frameCount%10 == 0 {
 		sprite.frame++
 	}
 
@@ -231,6 +231,7 @@ type Game struct {
 	gameOver       bool          // Add a field to track if the game is over
 	lastEnemySpawn time.Time     // Track when we last spawned an enemy
 	spawnInterval  time.Duration // Current interval between enemy spawns
+	scaleFactor    float32       // Add this line to define scaleFactor
 }
 
 type KeyEvent struct {
@@ -760,9 +761,17 @@ func (g *Game) drawGameOver(screen *ebiten.Image) {
 	ebitenutil.DebugPrintAt(screen, "Press R to restart", 300, 250)
 }
 
-func drawStatusBox(screen *ebiten.Image, x, y, width, height float32, enemies, killed int) {
+func drawStatusBox(screen *ebiten.Image, screenWidth, screenHeight int, enemies, killed int, scale float32) {
+	// Calculate the width and height based on a percentage of the screen size
+	width := float32(screenWidth) * 0.2    // 20% of the screen width
+	height := float32(screenHeight) * 0.08 // 15% of the screen height
+
+	// Calculate the position to place the box in the upper right corner
+	x := float32(screenWidth) - width - 20 // 20 pixels from the right edge
+	y := float32(20)                       // 20 pixels from the top edge
+
 	// Draw gradient background with rounded corners
-	cornerRadius := float32(30) // Increased corner radius for more pronounced effect
+	cornerRadius := float32(30) * scale // Adjust corner radius based on scale
 
 	// Draw multiple rectangles with decreasing alpha for gradient effect
 	for i := 0; i < 5; i++ {
@@ -810,27 +819,32 @@ func drawStatusBox(screen *ebiten.Image, x, y, width, height float32, enemies, k
 	// Draw text with labels
 	score := killed * 100 // Calculate score (100 points per kill)
 
+	// Get the current FPS
+	fps := ebiten.ActualFPS()
+
 	texts := []struct {
 		label   string
 		value   string
 		yOffset float32
 	}{
-		{"Enemies Remaining:", fmt.Sprintf("%d", enemies), height * 0.25}, // 25% from top
-		{"Enemies Killed:", fmt.Sprintf("%d", killed), height * 0.5},      // 50% from top (middle)
-		{"Score:", fmt.Sprintf("%d", score), height * 0.75},               // 75% from top
+		{"Enemies Remaining:", fmt.Sprintf("%d", enemies), height * 0.20}, // Adjusted to 20% from top
+		{"Enemies Killed:", fmt.Sprintf("%d", killed), height * 0.40},     // Adjusted to 40% from top
+		{"Score:", fmt.Sprintf("%d", score), height * 0.60},               // Adjusted to 60% from top
+		{"FPS:", fmt.Sprintf("%.2f", fps), height * 0.8},                  // Added FPS at 80% from top
+
 	}
 
 	for _, txt := range texts {
 		// Draw label (left-aligned)
-		text.Draw(screen, txt.label, gameFont, int(x)+30, int(y+txt.yOffset), color.RGBA{255, 165, 0, 255}) // Orange text
+		text.Draw(screen, txt.label, gameFont, int(x)+int(30*scale), int(y+txt.yOffset), color.RGBA{255, 165, 0, 255}) // Orange text
 
 		// Draw value (right-aligned)
 		bounds := text.BoundString(gameFont, txt.value)
-		text.Draw(screen, txt.value, gameFont, int(x+width-30-float32(bounds.Dx())), int(y+txt.yOffset), color.RGBA{255, 165, 0, 255}) // Orange text
+		text.Draw(screen, txt.value, gameFont, int(x+width-30*scale-float32(bounds.Dx())), int(y+txt.yOffset), color.RGBA{255, 165, 0, 255}) // Orange text
 
 		// Add drop shadow
-		text.Draw(screen, txt.label, gameFont, int(x)+32, int(y+txt.yOffset)+2, color.Black)
-		text.Draw(screen, txt.value, gameFont, int(x+width-28-float32(bounds.Dx())), int(y+txt.yOffset)+2, color.Black)
+		text.Draw(screen, txt.label, gameFont, int(x)+int(32*scale), int(y+txt.yOffset)+int(2*scale), color.Black)
+		text.Draw(screen, txt.value, gameFont, int(x+width-28*scale-float32(bounds.Dx())), int(y+txt.yOffset)+int(2*scale), color.Black)
 	}
 }
 
@@ -849,8 +863,11 @@ func (g *Game) Draw(screen *ebiten.Image) {
 
 	g.drawGameView(screen)
 
-	// Draw status box in top right corner with dimensions reduced by 30%
-	drawStatusBox(screen, 1420, 20, 406, 210, len(g.enemies), g.enemiesKilled)
+	// Get the current screen size
+	screenWidth, screenHeight := screen.Size()
+
+	// Draw status box in top right corner with a scale factor
+	drawStatusBox(screen, screenWidth, screenHeight, len(g.enemies), g.enemiesKilled, g.scaleFactor)
 
 	if g.gameOver {
 		g.drawGameOver(screen)
@@ -926,6 +943,7 @@ func main() {
 		player:      p,
 		debugLogs:   []string{},
 		lastLogTime: time.Now(), // Initialize the last log time
+		scaleFactor: 1.0,        // Initialize scaleFactor with a default value
 	}
 
 	// Example of adding an enemy
