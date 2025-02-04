@@ -21,9 +21,9 @@ import (
 )
 
 // Define screen size constants
-const (
-	screenWidth  = 1000
-	screenHeight = 640
+var (
+	screenWidth  = 0
+	screenHeight = 0
 )
 
 var gameFont font.Face
@@ -204,16 +204,16 @@ func (e *Enemy) RandomMovement() {
 			if e.x < 0 {
 				e.x = 0
 				dx = -dx
-			} else if e.x > screenWidth {
-				e.x = screenWidth
+			} else if e.x > float64(screenWidth) {
+				e.x = float64(screenWidth)
 				dx = -dx
 			}
 
 			if e.y < 0 {
 				e.y = 0
 				dy = -dy
-			} else if e.y > screenHeight {
-				e.y = screenHeight
+			} else if e.y > float64(screenHeight) {
+				e.y = float64(screenHeight)
 				dy = -dy
 			}
 
@@ -521,14 +521,14 @@ func (g *Game) Update() error {
 	}
 
 	if g.player.x <= 0 {
-		g.player.x = screenWidth // Wrap to the right edge
-	} else if g.player.x >= screenWidth {
+		g.player.x = float64(screenWidth) // Wrap to the right edge
+	} else if g.player.x >= float64(screenWidth) {
 		g.player.x = 0 // Wrap to the left edge
 	}
 
 	if g.player.y <= 0 {
-		g.player.y = screenHeight // Wrap to the bottom edge
-	} else if g.player.y >= screenHeight {
+		g.player.y = float64(screenHeight) // Wrap to the bottom edge
+	} else if g.player.y >= float64(screenHeight) {
 		g.player.y = 0 // Wrap to the top edge
 	}
 
@@ -771,7 +771,7 @@ func drawStatusBox(screen *ebiten.Image, x, y, width, height float32, enemies, k
 
 	// Draw multiple rectangles with decreasing alpha for gradient effect
 	for i := 0; i < 5; i++ {
-		alpha := uint8(60 - i*10) // Reduced base alpha to 60 (40% transparent)
+		alpha := uint8(128 - i*10) // 50% translucent
 		path := &vector.Path{}
 
 		// Start at top-left corner
@@ -805,7 +805,7 @@ func drawStatusBox(screen *ebiten.Image, x, y, width, height float32, enemies, k
 
 		// Create gradient color
 		src := ebiten.NewImage(1, 1)
-		src.Fill(color.RGBA{30, 30, 50, alpha})
+		src.Fill(color.RGBA{128, 0, 128, alpha}) // Purple background
 
 		op := &ebiten.DrawTrianglesOptions{}
 		op.FillRule = ebiten.EvenOdd
@@ -827,11 +827,15 @@ func drawStatusBox(screen *ebiten.Image, x, y, width, height float32, enemies, k
 
 	for _, txt := range texts {
 		// Draw label (left-aligned)
-		text.Draw(screen, txt.label, gameFont, int(x)+30, int(y+txt.yOffset), color.White)
+		text.Draw(screen, txt.label, gameFont, int(x)+30, int(y+txt.yOffset), color.RGBA{255, 165, 0, 255}) // Orange text
 
 		// Draw value (right-aligned)
 		bounds := text.BoundString(gameFont, txt.value)
-		text.Draw(screen, txt.value, gameFont, int(x+width-30-float32(bounds.Dx())), int(y+txt.yOffset), color.White)
+		text.Draw(screen, txt.value, gameFont, int(x+width-30-float32(bounds.Dx())), int(y+txt.yOffset), color.RGBA{255, 165, 0, 255}) // Orange text
+
+		// Add drop shadow
+		text.Draw(screen, txt.label, gameFont, int(x)+32, int(y+txt.yOffset)+2, color.Black)
+		text.Draw(screen, txt.value, gameFont, int(x+width-28-float32(bounds.Dx())), int(y+txt.yOffset)+2, color.Black)
 	}
 }
 
@@ -889,7 +893,26 @@ func calculateAngleToMouse(playerX, playerY float64) float32 {
 	return float32(math.Atan2(dy, dx) * (180 / math.Pi))
 }
 
+// GetMaxScreenSize returns the maximum screen size for the primary monitor.
+func GetMaxScreenSize() (int, int) {
+	monitor := ebiten.Monitor()
+	if monitor == nil {
+		log.Fatal("No primary monitor found")
+	}
+
+	width, height := monitor.Size()
+	return width, height
+}
+
 func main() {
+	// Get the maximum screen size for the primary monitor
+	screenWidth, screenHeight = GetMaxScreenSize()
+
+	// Set the window size to the maximum screen size
+	ebiten.SetWindowSize(screenWidth, screenHeight)
+	ebiten.SetWindowTitle("Basic Game Menu")
+	ebiten.SetFullscreen(true)
+
 	rand.Seed(time.Now().UnixNano())
 
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
@@ -923,9 +946,6 @@ func main() {
 	// Example of adding a debug log
 	game.addDebugLog("Game started")
 
-	ebiten.SetWindowSize(450, 450) //1080p
-	ebiten.SetWindowTitle("Basic Game Menu")
-	ebiten.SetFullscreen(true)
 	if err := ebiten.RunGame(game); err != nil {
 		log.Fatal(err)
 	}
