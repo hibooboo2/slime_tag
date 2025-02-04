@@ -72,10 +72,16 @@ type Player struct {
 	hp            int
 }
 
+var sprites = map[string]*ebiten.Image{}
+
 func NewSprite(fileName string, width int) *AnimatedSprite {
-	spriteImage, _, err := ebitenutil.NewImageFromFileSystem(slimes, fileName) // Load the sprite image
-	if err != nil {
-		panic(err)
+	spriteImage, ok := sprites[fileName]
+	if !ok {
+		spriteImage, _, err := ebitenutil.NewImageFromFileSystem(slimes, fileName) // Load the sprite image
+		if err != nil {
+			panic(err)
+		}
+		sprites[fileName] = spriteImage
 	}
 
 	return &AnimatedSprite{
