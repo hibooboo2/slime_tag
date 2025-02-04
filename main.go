@@ -503,8 +503,8 @@ func (g *Game) Update() error {
 			g.player.movementAngle = float32(math.Atan2(dy, dx) * (180 / math.Pi))
 		}
 
-		// Handle shooting action
-		if ebiten.IsKeyPressed(ebiten.KeySpace) && g.frameCount%10 == 0 {
+		// Handle shooting action with left mouse button
+		if ebiten.IsMouseButtonPressed(ebiten.MouseButtonLeft) && g.frameCount%10 == 0 {
 			g.player.attacking = true
 			// Create bullet aimed at mouse position
 			bullet := &Bullet{
