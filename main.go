@@ -198,6 +198,7 @@ type Enemy struct {
 	dx, dy              float64
 	movementAngle       float32
 	done                chan bool
+	attacking           time.Time
 }
 
 var enemyTypes = []string{
@@ -241,7 +242,6 @@ func (e *Enemy) RandomMovement(playerX, playerY float64) {
 			e.movementAngle = float32(angle)
 			e.dx = math.Cos(angle)
 			e.dy = math.Sin(angle)
-
 		}
 		e.lastIntentionChange = time.Now()
 	}
@@ -423,7 +423,7 @@ func (g *Game) handleKeys() {
 					if err != nil {
 						log.Fatalf("Error getting home directory: %v", err)
 					}
-					err = SaveSettings(path.Join(homeDir, ".slime_tag_settings.json"))
+					err = SaveSettings(path.Join(homeDir, ".slime_tag_settings.json"), g.debugMode)
 					if err != nil {
 						g.addDebugLog(fmt.Sprintf("Error saving settings: %v", err))
 					}
@@ -437,6 +437,11 @@ func (g *Game) handleKeys() {
 							g.settingsOptions[1] = "Toggle Debug Mode: On"
 						} else {
 							g.settingsOptions[1] = "Toggle Debug Mode: Off"
+						}
+						// Save settings when debug mode is toggled
+						homeDir, err := os.UserHomeDir()
+						if err == nil {
+							SaveSettings(path.Join(homeDir, ".slime_tag_settings.json"), g.debugMode)
 						}
 					case 2: // Back
 						g.settings = false
@@ -1237,18 +1242,6 @@ func main() {
 		log.Fatalf("Error getting home directory: %v", err)
 	}
 
-	if err := LoadSettings(path.Join(homeDir, ".slime_tag_settings.json")); err != nil {
-		screenWidth, screenHeight = GetMaxScreenSize()
-		SaveSettings(path.Join(homeDir, ".slime_tag_settings.json"))
-	}
-	ebiten.SetWindowSize(screenWidth, screenHeight)
-	ebiten.SetWindowTitle("Basic Game Menu")
-	ebiten.SetFullscreen(true)
-
-	log.Println("screenWidth", screenWidth, "screenHeight", screenHeight)
-
-	// Set the window size to the maximum screen size
-
 	rand.Seed(time.Now().UnixNano())
 
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
@@ -1259,10 +1252,28 @@ func main() {
 	}
 	p.hpBar.currentHP = 100
 
+	// Load settings before creating game instance
+	settings, err := LoadSettings(path.Join(homeDir, ".slime_tag_settings.json"))
+	if err != nil {
+		screenWidth, screenHeight = GetMaxScreenSize()
+		SaveSettings(path.Join(homeDir, ".slime_tag_settings.json"), false)
+	} else {
+		resolution := strings.Split(settings.Resolution, "x")
+		screenWidth, _ = strconv.Atoi(resolution[0])
+		screenHeight, _ = strconv.Atoi(resolution[1])
+	}
+
+	ebiten.SetWindowSize(screenWidth, screenHeight)
+	ebiten.SetWindowTitle("Basic Game Menu")
+	ebiten.SetFullscreen(true)
+
+	log.Println("screenWidth", screenWidth, "screenHeight", screenHeight)
+
+	// Create game instance after loading settings
 	game := &Game{
 		menuOptions: []string{"Start Game", "Settings", "Fun Stuff", "Exit"},
 		settingsOptions: []string{
-			"Resolution: 1920x1080", // Will be updated with actual resolution
+			"Resolution: 1920x1080",
 			"Toggle Debug Mode: Off",
 			"Back",
 		},
@@ -1272,9 +1283,15 @@ func main() {
 		keys:             NewKeys(),
 		player:           p,
 		debugLogs:        []string{},
-		lastLogTime:      time.Now(), // Initialize the last log time
-		scaleFactor:      1.0,        // Initialize scaleFactor with a default value
+		lastLogTime:      time.Now(),
+		scaleFactor:      1.0,
+		debugMode:        settings.DebugMode,
 	}
+
+	if game.debugMode {
+		game.settingsOptions[1] = "Toggle Debug Mode: On"
+	}
+
 	game.resolutionOptions = GetTopResolutions(screenWidth, screenHeight)
 
 	// Example of adding an enemy
@@ -1305,13 +1322,15 @@ func (g *Game) AddFloatingText(text string, x, y float64, color color.Color) {
 type Settings struct {
 	Resolution string `json:"resolution"`
 	Fullscreen bool   `json:"fullscreen"`
+	DebugMode  bool   `json:"debugMode"`
 	// Add other settings as needed
 }
 
-func SaveSettings(filePath string) error {
+func SaveSettings(filePath string, debugMode bool) error {
 	settings := Settings{
 		Resolution: fmt.Sprintf("%dx%d", screenWidth, screenHeight),
 		Fullscreen: true, // Assuming fullscreen is enabled
+		DebugMode:  debugMode,
 		// Add other settings as needed
 	}
 
@@ -1323,15 +1342,16 @@ func SaveSettings(filePath string) error {
 	return os.WriteFile(filePath, data, 0644)
 }
 
-func LoadSettings(filePath string) error {
+func LoadSettings(filePath string) (Settings, error) {
 	data, err := os.ReadFile(filePath)
 	if err != nil {
-		return err
+		return Settings{}, err
+
 	}
 
 	var settings Settings
 	if err := json.Unmarshal(data, &settings); err != nil {
-		return err
+		return Settings{}, err
 	}
 
 	// Update game settings
@@ -1344,5 +1364,5 @@ func LoadSettings(filePath string) error {
 		ebiten.SetFullscreen(settings.Fullscreen)
 	}
 
-	return nil
+	return settings, nil
 }
