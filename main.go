@@ -9,6 +9,7 @@ import (
 	"math"
 	"math/rand"
 	"os"
+	"path"
 	"slices"
 	"strconv"
 	"strings"
@@ -392,14 +393,21 @@ func (g *Game) handleKeys() {
 			case ebiten.KeyArrowUp:
 				g.selected = (g.selected - 1 + len(g.resolutionOptions)) % len(g.resolutionOptions)
 			case ebiten.KeyEnter:
-				screenWidth, screenHeight := parseResolution(g.resolutionOptions[g.selected])
+				screenWidth, screenHeight = parseResolution(g.resolutionOptions[g.selected])
 				g.addDebugLog(fmt.Sprintf("Setting resolution to %d x %d", screenWidth, screenHeight))
 				log.Println("resolution changed", screenWidth, screenHeight)
 				ebiten.SetWindowSize(screenWidth, screenHeight)
 				ebiten.SetFullscreen(true)
-				SaveSettings("~/.slime_tag_settings.json")
-				g.exit = true
+				homeDir, err := os.UserHomeDir()
+				if err != nil {
+					log.Fatalf("Error getting home directory: %v", err)
+				}
+				err = SaveSettings(path.Join(homeDir, ".slime_tag_settings.json"))
+				if err != nil {
+					g.addDebugLog(fmt.Sprintf("Error saving settings: %v", err))
+				}
 			case ebiten.KeyEscape:
+
 				g.settings = false
 				g.inMainMenu = true
 
@@ -741,9 +749,10 @@ func (g *Game) Update() error {
 		if len(g.enemies) == 0 {
 			// Spawn 20 new enemies
 			for i := range 20 {
-				x := rand.Intn(1920 / 2)
-				y := rand.Intn(1080 / 2)
+				x := rand.Intn(screenWidth / 2)
+				y := rand.Intn(screenHeight / 2)
 				g.enemies = append(g.enemies, NewEnemy(enemyTypes[(i%len(enemyTypes))], float64(x), float64(y)))
+
 			}
 		}
 	}
@@ -764,7 +773,7 @@ func (g *Game) Update() error {
 
 	// Check if it's time to spawn a new enemy
 	if time.Since(g.lastEnemySpawn) >= g.spawnInterval {
-		x := rand.Intn(1920 / 2)
+		x := rand.Intn(screenWidth / 2)
 		y := rand.Intn(1080 / 2)
 		g.enemies = append(g.enemies, NewEnemy(enemyTypes[rand.Intn(len(enemyTypes))], float64(x), float64(y)))
 		g.lastEnemySpawn = time.Now()
@@ -1169,13 +1178,20 @@ func GetMaxScreenSize() (int, int) {
 
 func main() {
 	// Get the maximum screen size for the primary monitor
-	screenWidth, screenHeight = GetMaxScreenSize()
-
-	if err := LoadSettings("~/.slime_tag_settings.json"); err != nil {
-		ebiten.SetWindowSize(screenWidth, screenHeight)
-		ebiten.SetWindowTitle("Basic Game Menu")
-		ebiten.SetFullscreen(true)
+	// screenWidth, screenHeight = GetMaxScreenSize()
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		log.Fatalf("Error getting home directory: %v", err)
 	}
+
+	if err := LoadSettings(path.Join(homeDir, ".slime_tag_settings.json")); err != nil {
+		screenWidth, screenHeight = GetMaxScreenSize()
+		SaveSettings(path.Join(homeDir, ".slime_tag_settings.json"))
+	}
+	ebiten.SetWindowSize(screenWidth, screenHeight)
+	ebiten.SetWindowTitle("Basic Game Menu")
+	ebiten.SetFullscreen(true)
+
 	log.Println("screenWidth", screenWidth, "screenHeight", screenHeight)
 
 	// Set the window size to the maximum screen size
@@ -1215,8 +1231,11 @@ func main() {
 	// Example of adding a debug log
 	game.addDebugLog("Game started")
 
-	if err := ebiten.RunGame(game); err != nil {
-		log.Fatal(err)
+	for !(game.exit && game.inMainMenu) {
+		if err := ebiten.RunGame(game); err != nil {
+			log.Fatalf("Error running game: %v", err)
+		}
+
 	}
 }
 

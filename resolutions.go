@@ -10,6 +10,7 @@ func GetTopResolutions(currentWidth, currentHeight int) []string {
 		width, height int
 	}{
 		{3840, 2160}, // 4K
+		{3440, 1440}, // 3440x1440
 		{2560, 1440}, // QHD
 		{1920, 1080}, // Full HD
 		{1680, 1050}, // WSXGA+
@@ -33,21 +34,19 @@ func GetTopResolutions(currentWidth, currentHeight int) []string {
 	}
 
 	// Filter and sort resolutions
-	var filteredResolutions []string
+	var resolutionsAsStrings []string
 	for _, res := range resolutions {
-		if res.width <= currentWidth && res.height <= currentHeight {
-			filteredResolutions = append(filteredResolutions, fmt.Sprintf("%dx%d", res.width, res.height))
-		}
+		resolutionsAsStrings = append(resolutionsAsStrings, fmt.Sprintf("%dx%d", res.width, res.height))
 	}
 
 	// Sort resolutions by size (width * height)
-	sort.Slice(filteredResolutions, func(i, j int) bool {
-		width1, height1 := parseResolution(filteredResolutions[i])
-		width2, height2 := parseResolution(filteredResolutions[j])
+	sort.Slice(resolutionsAsStrings, func(i, j int) bool {
+		width1, height1 := parseResolution(resolutionsAsStrings[i])
+		width2, height2 := parseResolution(resolutionsAsStrings[j])
 		return (width1 * height1) > (width2 * height2)
 	})
 
-	return filteredResolutions
+	return resolutionsAsStrings
 }
 
 func parseResolution(res string) (int, int) {
