@@ -25,15 +25,19 @@ import (
 	"golang.org/x/image/font/opentype"
 )
 
-// Define screen size constants
 var (
-	screenWidth  = 0
-	screenHeight = 0
+	screenWidth     = 0
+	screenHeight    = 0
+	backgroundImage *ebiten.Image
 )
 
 var gameFont font.Face
 
 func init() {
+	// Create a black background image
+	backgroundImage = ebiten.NewImage(1, 1)
+	backgroundImage.Fill(color.Black)
+
 	tt, err := opentype.Parse(goregular.TTF)
 	if err != nil {
 		log.Fatal(err)
@@ -340,6 +344,11 @@ type Game struct {
 	powerUps          []*PowerUp
 	lastPowerUpSpawn  time.Time // Add this line to track the last power-up spawn time
 	floatingTexts     []*FloatingText
+	settingsOptions   []string
+	settingsSelected  int
+	debugMode         bool
+	showResolutions   bool // Whether to show resolution popup
+	resolutionIdx     int  // Currently selected resolution
 }
 
 type KeyEvent struct {
@@ -389,28 +398,58 @@ func (g *Game) handleKeys() {
 		case g.settings:
 			switch event.Key {
 			case ebiten.KeyArrowDown:
-				g.selected = (g.selected + 1) % len(g.resolutionOptions)
-			case ebiten.KeyArrowUp:
-				g.selected = (g.selected - 1 + len(g.resolutionOptions)) % len(g.resolutionOptions)
-			case ebiten.KeyEnter:
-				screenWidth, screenHeight = parseResolution(g.resolutionOptions[g.selected])
-				g.addDebugLog(fmt.Sprintf("Setting resolution to %d x %d", screenWidth, screenHeight))
-				log.Println("resolution changed", screenWidth, screenHeight)
-				ebiten.SetWindowSize(screenWidth, screenHeight)
-				ebiten.SetFullscreen(true)
-				homeDir, err := os.UserHomeDir()
-				if err != nil {
-					log.Fatalf("Error getting home directory: %v", err)
+				if g.showResolutions {
+					g.resolutionIdx = (g.resolutionIdx + 1) % len(g.resolutionOptions)
+				} else {
+					g.settingsSelected = (g.settingsSelected + 1) % len(g.settingsOptions)
 				}
-				err = SaveSettings(path.Join(homeDir, ".slime_tag_settings.json"))
-				if err != nil {
-					g.addDebugLog(fmt.Sprintf("Error saving settings: %v", err))
+			case ebiten.KeyArrowUp:
+				if g.showResolutions {
+					g.resolutionIdx = (g.resolutionIdx - 1 + len(g.resolutionOptions)) % len(g.resolutionOptions)
+				} else {
+					g.settingsSelected = (g.settingsSelected - 1 + len(g.settingsOptions)) % len(g.settingsOptions)
+				}
+			case ebiten.KeyEnter:
+				if g.showResolutions {
+					// Apply selected resolution
+					g.settingsOptions[0] = "Resolution: " + g.resolutionOptions[g.resolutionIdx]
+					g.showResolutions = false
+					screenWidth, screenHeight = parseResolution(g.resolutionOptions[g.resolutionIdx])
+					g.addDebugLog(fmt.Sprintf("Setting resolution to %d x %d", screenWidth, screenHeight))
+					log.Println("resolution changed", screenWidth, screenHeight)
+					ebiten.SetWindowSize(screenWidth, screenHeight)
+					ebiten.SetFullscreen(true)
+					homeDir, err := os.UserHomeDir()
+					if err != nil {
+						log.Fatalf("Error getting home directory: %v", err)
+					}
+					err = SaveSettings(path.Join(homeDir, ".slime_tag_settings.json"))
+					if err != nil {
+						g.addDebugLog(fmt.Sprintf("Error saving settings: %v", err))
+					}
+				} else {
+					switch g.settingsSelected {
+					case 0: // Resolution
+						g.showResolutions = true
+					case 1: // Debug Mode
+						g.debugMode = !g.debugMode
+						if g.debugMode {
+							g.settingsOptions[1] = "Toggle Debug Mode: On"
+						} else {
+							g.settingsOptions[1] = "Toggle Debug Mode: Off"
+						}
+					case 2: // Back
+						g.settings = false
+						g.inMainMenu = true
+					}
 				}
 			case ebiten.KeyEscape:
-
-				g.settings = false
-				g.inMainMenu = true
-
+				if g.showResolutions {
+					g.showResolutions = false
+				} else {
+					g.settings = false
+					g.inMainMenu = true
+				}
 			}
 		case g.inMainMenu:
 			switch event.Key {
@@ -994,22 +1033,31 @@ func (g *Game) drawDebugLogs(screen *ebiten.Image) {
 }
 
 func (g *Game) drawSettings(screen *ebiten.Image) {
-	// Example settings screen drawing logic
 	screen.Fill(color.RGBA{50, 50, 50, 255}) // Dark gray background
-	ebitenutil.DebugPrintAt(screen, "Settings", 20, 20)
 
-	// Dropdown box variables
-	dropdownWidth := 200
-	dropdownHeight := 30
-	dropdownX := (screenWidth - dropdownWidth) / 2
-	dropdownY := screenHeight / 2
+	// Draw main settings menu
+	for i, option := range g.settingsOptions {
+		if i == g.settingsSelected {
+			// Highlight selected option
+			vector.DrawFilledRect(screen, 15, float32(20+i*30), 300, 25, color.RGBA{255, 165, 0, 255}, true)
+		}
+		ebitenutil.DebugPrintAt(screen, option, 20, 20+i*30)
+	}
 
-	// Draw the dropdown box background
-	vector.DrawFilledRect(screen, float32(dropdownX), float32(dropdownY), float32(dropdownWidth), float32(dropdownHeight), color.RGBA{255, 255, 255, 255}, true)
+	// Draw resolution popup if active
+	if g.showResolutions {
+		// Draw popup background
+		popupX := 320 // Position to the right of settings menu
+		vector.DrawFilledRect(screen, float32(popupX), 20, 200, float32(len(g.resolutionOptions)*30+10), color.RGBA{70, 70, 70, 255}, true)
 
-	// Draw the selected option
-	selectedOption := g.resolutionOptions[g.selected] // Assuming g.selected is used to track the selected option
-	ebitenutil.DebugPrintAt(screen, selectedOption, dropdownX+10, dropdownY+5)
+		// Draw resolution options
+		for i, res := range g.resolutionOptions {
+			if i == g.resolutionIdx {
+				vector.DrawFilledRect(screen, float32(popupX), float32(20+i*30), 190, 25, color.RGBA{255, 165, 0, 255}, true)
+			}
+			ebitenutil.DebugPrintAt(screen, res, popupX+5, 20+i*30)
+		}
+	}
 }
 
 func (g *Game) drawGameOver(screen *ebiten.Image) {
@@ -1109,7 +1157,12 @@ func drawStatusBox(screen *ebiten.Image, screenWidth, screenHeight int, enemies,
 }
 
 func (g *Game) Draw(screen *ebiten.Image) {
-	defer g.drawDebugLogs(screen)
+	// Draw the background image
+	screen.DrawImage(backgroundImage, nil)
+
+	if g.debugMode {
+		defer g.drawDebugLogs(screen)
+	}
 
 	if g.inMainMenu {
 		g.drawMenu(screen)
@@ -1208,13 +1261,19 @@ func main() {
 
 	game := &Game{
 		menuOptions: []string{"Start Game", "Settings", "Fun Stuff", "Exit"},
-		selected:    0,
-		inMainMenu:  false,
-		keys:        NewKeys(),
-		player:      p,
-		debugLogs:   []string{},
-		lastLogTime: time.Now(), // Initialize the last log time
-		scaleFactor: 1.0,        // Initialize scaleFactor with a default value
+		settingsOptions: []string{
+			"Resolution: 1920x1080", // Will be updated with actual resolution
+			"Toggle Debug Mode: Off",
+			"Back",
+		},
+		selected:         0,
+		settingsSelected: 0,
+		inMainMenu:       false,
+		keys:             NewKeys(),
+		player:           p,
+		debugLogs:        []string{},
+		lastLogTime:      time.Now(), // Initialize the last log time
+		scaleFactor:      1.0,        // Initialize scaleFactor with a default value
 	}
 	game.resolutionOptions = GetTopResolutions(screenWidth, screenHeight)
 
