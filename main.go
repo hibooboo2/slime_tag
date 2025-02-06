@@ -29,9 +29,12 @@ var (
 	screenWidth     = 0
 	screenHeight    = 0
 	backgroundImage *ebiten.Image
+	statusBoxBg     *ebiten.Image
 )
 
 var gameFont font.Face
+
+var baseResolution = 1920 // Base resolution for scaling
 
 func init() {
 	// Create a black background image
@@ -51,6 +54,21 @@ func init() {
 	if err != nil {
 		log.Fatal(err)
 	}
+
+	// Load and prepare the status box background
+	caveImg, _, err := ebitenutil.NewImageFromFile("/home/eric/go/src/github.com/hibooboo2/slime_tag/slimes/PNG/0.png")
+	if err != nil {
+		log.Fatalf("Failed to load image: %v", err)
+	}
+
+	// Create a new image with transparency for the status box
+	statusBoxBg = ebiten.NewImage(caveImg.Bounds().Dx(), caveImg.Bounds().Dy())
+	op := &ebiten.DrawImageOptions{}
+	op.ColorM.Scale(1, 1, 1, 0.5) // 50% transparency
+	statusBoxBg.DrawImage(caveImg, op)
+
+	// Use the same image for the background
+	backgroundImage = caveImg // Use the same loaded image for the main background
 }
 
 type AnimatedSprite struct {
@@ -598,12 +616,15 @@ func (g *Game) checkEnemyBulletCollisions() {
 					g.enemiesKilled++                                                              // Increment the enemies killed count
 					g.AddFloatingText("+5 HP", g.player.x, g.player.y, color.RGBA{0, 255, 0, 255}) // Add healing text
 					g.player.hpBar.AddHP(5)
+
 					// Reduce spawn interval by 15ms per kill, with a minimum of 100ms
-					enemySpawnRate := g.spawnInterval - (50 * time.Millisecond)
-					if enemySpawnRate < 100*time.Millisecond {
-						enemySpawnRate = 100 * time.Millisecond
+					g.spawnInterval -= 15 * time.Millisecond
+					if g.spawnInterval < 100*time.Millisecond {
+						g.spawnInterval = 100 * time.Millisecond // Ensure a minimum spawn interval
 					}
-					g.spawnInterval = enemySpawnRate
+
+					// Log the current spawn interval to the debug log
+					g.addDebugLog(fmt.Sprintf("Current Spawn Interval: %v", g.spawnInterval))
 
 					// Spawn a power-up every 5 enemies killed
 					if g.enemiesKilled%5 == 0 {
@@ -846,6 +867,8 @@ func (g *Game) Update() error {
 	}
 	g.floatingTexts = activeTexts
 
+	log.Printf("Enemies Killed: %d, Current Spawn Interval: %v", g.enemiesKilled, g.spawnInterval)
+
 	return nil
 }
 
@@ -888,6 +911,7 @@ func drawArc(screen *ebiten.Image, x, y, radius, startAngle, endAngle float32, c
 	src.Fill(clr)
 
 	op := &ebiten.DrawTrianglesOptions{}
+	op.ColorM.Scale(1, 1, 1, 0.8)
 	screen.DrawTriangles(vertices, indices, src, op)
 }
 
@@ -1071,99 +1095,107 @@ func (g *Game) drawGameOver(screen *ebiten.Image) {
 	ebitenutil.DebugPrintAt(screen, "Press R to restart", 300, 250)
 }
 
-func drawStatusBox(screen *ebiten.Image, screenWidth, screenHeight int, enemies, killed int, scale float32) {
-	// Calculate the width and height based on a percentage of the screen size
-	width := float32(screenWidth) * 0.2    // 20% of the screen width
-	height := float32(screenHeight) * 0.08 // 15% of the screen height
+type StatusBox struct {
+	width, height float32
+	x, y          float32
+	enemies       int
+	killed        int
+	scale         float32
+}
 
-	// Calculate the position to place the box in the upper right corner
-	x := float32(screenWidth) - width - 20 // 20 pixels from the right edge
-	y := float32(20)                       // 20 pixels from the top edge
+func drawStatusBox(screen *ebiten.Image, box *StatusBox) {
+	// Calculate scale based on both dimensions
+	baseWidth := float32(1920)
+	baseHeight := float32(1080)
+	scaleX := float32(screenWidth) / baseWidth
+	scaleY := float32(screenHeight) / baseHeight
+	scale := float32(math.Min(float64(scaleX), float64(scaleY)))
 
-	// Draw gradient background with rounded corners
-	cornerRadius := float32(30) * scale // Adjust corner radius based on scale
+	// Box should take up consistent percentage of screen
+	box.width = float32(screenWidth) * 0.2
+	box.height = float32(screenHeight) * 0.15
+	margin := float32(20) * scale
+	box.x = float32(screenWidth) - box.width - margin
+	box.y = margin
 
-	// Draw multiple rectangles with decreasing alpha for gradient effect
-	for i := 0; i < 5; i++ {
-		alpha := uint8(128 - i*10) // 50% translucent
-		path := &vector.Path{}
+	// Draw the background image scaled to the status box size
+	op := &ebiten.DrawImageOptions{}
+	op.ColorM.Scale(1, 1, 1, 0.5) // Set transparency to 50%
 
-		// Start at top-left corner
-		path.MoveTo(x, y)
+	// Scale the image to fit the status box dimensions
+	op.GeoM.Scale(float64(box.width)/float64(statusBoxBg.Bounds().Dx()), float64(box.height)/float64(statusBoxBg.Bounds().Dy()))
+	op.GeoM.Translate(float64(box.x), float64(box.y))
 
-		// Top edge
-		path.LineTo(x+width-cornerRadius, y)
+	// Draw the background image
+	screen.DrawImage(backgroundImage, op) // Ensure backgroundImage is the loaded cave background
 
-		// Top-right corner (inverted)
-		path.Arc(x+width-cornerRadius, y+cornerRadius, cornerRadius, -math.Pi/2, 0, vector.Clockwise)
-
-		// Right edge
-		path.LineTo(x+width, y+height-cornerRadius)
-
-		// Bottom-right corner (inverted)
-		path.Arc(x+width-cornerRadius, y+height-cornerRadius, cornerRadius, 0, math.Pi/2, vector.Clockwise)
-
-		// Bottom edge
-		path.LineTo(x+cornerRadius, y+height)
-
-		// Bottom-left corner (inverted)
-		path.Arc(x+cornerRadius, y+height-cornerRadius, cornerRadius, math.Pi/2, math.Pi, vector.Clockwise)
-
-		// Left edge
-		path.LineTo(x, y+cornerRadius)
-
-		// Top-left corner (inverted)
-		path.Arc(x+cornerRadius, y+cornerRadius, cornerRadius, math.Pi, -math.Pi/2, vector.Clockwise)
-
-		vertices, indices := path.AppendVerticesAndIndicesForFilling(nil, nil)
-
-		// Create gradient color
-		src := ebiten.NewImage(1, 1)
-		src.Fill(color.RGBA{128, 0, 128, alpha}) // Purple background
-
-		op := &ebiten.DrawTrianglesOptions{}
-		op.FillRule = ebiten.EvenOdd
-		screen.DrawTriangles(vertices, indices, src, op)
-	}
-
-	// Draw text with labels
-	score := killed * 100 // Calculate score (100 points per kill)
-
-	// Get the current FPS
-	fps := ebiten.ActualFPS()
+	// Scale text relative to box height to prevent overlap
+	textScale := (box.height / 162.0) * 0.6 // Scale text to 60% of the box height ratio
 
 	texts := []struct {
 		label   string
 		value   string
 		yOffset float32
 	}{
-		{"Enemies Remaining:", fmt.Sprintf("%d", enemies), height * 0.20}, // Adjusted to 20% from top
-		{"Enemies Killed:", fmt.Sprintf("%d", killed), height * 0.40},     // Adjusted to 40% from top
-		{"Score:", fmt.Sprintf("%d", score), height * 0.60},               // Adjusted to 60% from top
-		{"FPS:", fmt.Sprintf("%.2f", fps), height * 0.8},                  // Added FPS at 80% from top
-
+		{"Enemies:", fmt.Sprintf("%d", box.enemies), box.height * 0.25},
+		{"Kills:", fmt.Sprintf("%d", box.killed), box.height * 0.45},
+		{"Score:", fmt.Sprintf("%d", box.killed*100), box.height * 0.65},
+		{"FPS:", fmt.Sprintf("%.0f", ebiten.ActualFPS()), box.height * 0.85},
 	}
 
 	for _, txt := range texts {
+		padding := box.width * 0.1
+		labelBounds := text.BoundString(gameFont, txt.label)
+		valueBounds := text.BoundString(gameFont, txt.value)
+		labelWidth := float32(labelBounds.Dx()) * textScale
+		valueWidth := float32(valueBounds.Dx()) * textScale
 
-		bounds := text.BoundString(gameFont, txt.value)
+		// Adjust padding for left and right
+		leftPadding := box.width * 0.05
+		rightPadding := box.width * 0.2
 
-		// Add drop shadow
-		text.Draw(screen, txt.value, gameFont, int(x+width-28*scale-float32(bounds.Dx())), int(y+txt.yOffset)+int(2*scale), color.Black)
-		text.Draw(screen, txt.label, gameFont, int(x)+int(32*scale), int(y+txt.yOffset)+int(2*scale), color.Black)
+		// Additional scaling for score value to prevent overflow
+		localScale := textScale
+		if txt.label == "Score:" && valueWidth+labelWidth+leftPadding+rightPadding > box.width {
+			localScale = (box.width - labelWidth - rightPadding) / float32(valueBounds.Dx())
+			valueWidth = float32(valueBounds.Dx()) * localScale
+		}
 
-		// Draw label (left-aligned)
-		text.Draw(screen, txt.label, gameFont, int(x)+int(30*scale), int(y+txt.yOffset), color.RGBA{255, 165, 0, 255}) // Orange text
+		text.Draw(screen, txt.label, gameFont,
+			int(box.x+padding),
+			int(box.y+txt.yOffset),
+			color.RGBA{255, 165, 0, 255})
 
-		// Draw value (right-aligned)
-		text.Draw(screen, txt.value, gameFont, int(x+width-30*scale-float32(bounds.Dx())), int(y+txt.yOffset), color.RGBA{255, 165, 0, 255}) // Orange text
-
+		text.Draw(screen, txt.value, gameFont,
+			int(box.x+box.width-padding-valueWidth),
+			int(box.y+txt.yOffset),
+			color.RGBA{255, 165, 0, 255})
 	}
 }
 
 func (g *Game) Draw(screen *ebiten.Image) {
-	// Draw the background image
-	screen.DrawImage(backgroundImage, nil)
+	// Draw the game background if needed
+	// screen.DrawImage(backgroundImage, nil) // Uncomment if you have a separate game background
+
+	// Create a status box object
+	statusBox := &StatusBox{
+		width:   float32(screenWidth) * 0.2,
+		height:  float32(screenHeight) * 0.15,
+		x:       float32(screenWidth) - (float32(screenWidth)*0.2 - 20),
+		y:       20,
+		enemies: len(g.enemies),
+		killed:  g.enemiesKilled,
+		scale:   g.scaleFactor,
+	}
+
+	// Draw the status box background
+	op := &ebiten.DrawImageOptions{}
+	op.GeoM.Scale(float64(statusBox.width)/float64(statusBoxBg.Bounds().Dx()), float64(statusBox.height)/float64(statusBoxBg.Bounds().Dy()))
+	op.GeoM.Translate(float64(statusBox.x), float64(statusBox.y))
+	screen.DrawImage(statusBoxBg, op) // Draw the status box background
+
+	// Draw other elements in the status box as needed
+	// ...
 
 	if g.debugMode {
 		defer g.drawDebugLogs(screen)
@@ -1184,8 +1216,19 @@ func (g *Game) Draw(screen *ebiten.Image) {
 	// Get the current screen size
 	screenWidth, screenHeight := screen.Size()
 
-	// Draw status box in top right corner with a scale factor
-	drawStatusBox(screen, screenWidth, screenHeight, len(g.enemies), g.enemiesKilled, g.scaleFactor)
+	// Create a status box object
+	statusBox = &StatusBox{
+		width:   float32(screenWidth) * 0.2,
+		height:  float32(screenHeight) * 0.08,
+		x:       float32(screenWidth) - (float32(screenWidth) * 0.2) - 20,
+		y:       20,
+		enemies: len(g.enemies),
+		killed:  g.enemiesKilled,
+		scale:   g.scaleFactor,
+	}
+
+	// Draw the status box
+	drawStatusBox(screen, statusBox)
 
 	if g.gameOver {
 		g.drawGameOver(screen)
@@ -1365,4 +1408,12 @@ func LoadSettings(filePath string) (Settings, error) {
 	}
 
 	return settings, nil
+}
+
+func loadImage(path string) (*ebiten.Image, error) {
+	img, _, err := ebitenutil.NewImageFromFile(path)
+	if err != nil {
+		return nil, err
+	}
+	return img, nil
 }
