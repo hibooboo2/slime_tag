@@ -56,7 +56,7 @@ func init() {
 	}
 
 	// Load and prepare the status box background
-	caveImg, _, err := ebitenutil.NewImageFromFile("/home/eric/go/src/github.com/hibooboo2/slime_tag/slimes/PNG/0.png")
+	caveImg, _, err := ebitenutil.NewImageFromFileSystem(slimes, "slimes/PNG/0.png")
 	if err != nil {
 		log.Fatalf("Failed to load image: %v", err)
 	}
