@@ -34,15 +34,15 @@ func main() {
 	// Create viewer instance after loading settings
 	viewer := &Viewer{
 		spriteSize: 32,
-		spriteX:    4,
-		spriteY:    26,
+		spriteX:    1,
+		spriteY:    0,
 		keys:       keys.NewKeys(),
 	}
 
 	go viewer.HandleKeys()
 
 	var err error
-	spriteImage, _, err = ebitenutil.NewImageFromFileSystem(assets.Resources, os.Args[1]) // Load the sprite image
+	spriteImage, _, err = ebitenutil.NewImageFromFileSystem(assets.Resources, "resources/slimes/ProjectUtumno_full.png") // Load the sprite image
 	if err != nil {
 		panic(err)
 	}
@@ -53,10 +53,11 @@ func main() {
 }
 
 type Viewer struct {
-	spriteSize int
-	spriteX    int
-	spriteY    int
-	keys       *keys.Keys
+	spriteSize   int
+	spriteX      int
+	spriteY      int
+	keys         *keys.Keys
+	viewX, viewY int
 }
 
 func (v *Viewer) HandleKeys() {
@@ -92,6 +93,9 @@ func (v *Viewer) HandleKeys() {
 		} else if v.spriteY+v.spriteSize >= screenHeight {
 			v.spriteY = screenHeight - v.spriteSize
 		}
+
+		viewerPanelRect := v.getViewerPanelRect()
+
 	}
 }
 
@@ -104,6 +108,10 @@ func (v *Viewer) Update() error {
 func (v *Viewer) getSubImage(spriteImage *ebiten.Image, x, y, size int) image.Image {
 	rect := image.Rect(x*size, y*size, x*size+size, y*size+size)
 	return spriteImage.SubImage(rect)
+}
+
+func (v *Viewer) getViewerPanelRect() image.Rectangle {
+	return image.Rect(v.viewX*v.spriteSize, v.viewY*v.spriteSize, v.viewX*v.spriteSize+(20*v.spriteSize), v.viewY*v.spriteSize+(10*v.spriteSize))
 }
 
 func (v *Viewer) Draw(screen *ebiten.Image) {
@@ -119,24 +127,27 @@ func (v *Viewer) Draw(screen *ebiten.Image) {
 	ebitenutil.DebugPrintAt(screen, "Press C to copy to clipboard", 0, 40)
 
 	op := &ebiten.DrawImageOptions{}
-	op.GeoM.Translate(100, 100)
+	op.GeoM.Translate(float64(screenWidth)/4, float64(screenHeight)/4)
 
-	screen.DrawImage(spriteImage, op)
+	viewPanel := spriteImage.SubImage(v.getViewerPanelRect())
+
+	screen.DrawImage(viewPanel.(*ebiten.Image), op)
 
 	op2 := &ebiten.DrawImageOptions{}
 	op2.GeoM.Translate(70, 20)
 	op2.GeoM.Scale(2, 2)
 
-	subImage := v.getSubImage(spriteImage, v.spriteX, v.spriteY, v.spriteSize)
-	img := ebiten.NewImageFromImage(subImage)
+	preview := v.getSubImage(spriteImage, v.spriteX, v.spriteY, v.spriteSize)
+	img := ebiten.NewImageFromImage(preview)
 
 	screen.DrawImage(img, op2)
 
-	subImage2 := v.getSubImage(spriteImage, 5, 26, 32)
-	img2 := ebiten.NewImageFromImage(subImage2)
+	cursor := v.getSubImage(spriteImage, 5, 26, 32)
+	img2 := ebiten.NewImageFromImage(cursor)
 
 	op3 := &ebiten.DrawImageOptions{}
-	op3.GeoM.Translate(float64(v.spriteX)*float64(v.spriteSize)+100, float64(v.spriteY)*float64(v.spriteSize)+100)
+	op3.GeoM.Translate(float64(screenWidth)/4, float64(screenHeight)/4)
+	op3.GeoM.Translate(float64(v.spriteX-v.viewX)*float64(v.spriteSize), float64(v.spriteY-v.viewY)*float64(v.spriteSize))
 
 	screen.DrawImage(img2, op3)
 }
