@@ -1,4 +1,4 @@
-package main
+package assets
 
 import (
 	"embed"
@@ -8,10 +8,10 @@ import (
 )
 
 //go:embed slimes
-var slimes embed.FS
+var Slimes embed.FS
 
 func printEmbededFSFiles(dir string) {
-	entries, err := slimes.ReadDir(dir)
+	entries, err := Slimes.ReadDir(dir)
 	if err != nil {
 		log.Println(err) // Log and exit if there's an error
 		return

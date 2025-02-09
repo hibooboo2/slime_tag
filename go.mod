@@ -3,6 +3,7 @@ module github.com/hibooboo2/slime_tag
 go 1.23.5
 
 require (
+	github.com/atotto/clipboard v0.1.4
 	github.com/hajimehoshi/ebiten/v2 v2.8.6
 	golang.org/x/image v0.20.0
 )
