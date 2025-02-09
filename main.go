@@ -461,7 +461,9 @@ func (g *Game) handleKeys() {
 						if err == nil {
 							SaveSettings(path.Join(homeDir, ".slime_tag_settings.json"), g.debugMode)
 						}
-					case 2: // Back
+					case 2: // Crosshair Selector
+						// Implementation for Crosshair Selector
+					case 3: // Back
 						g.settings = false
 						g.inMainMenu = true
 					}
@@ -1318,6 +1320,7 @@ func main() {
 		settingsOptions: []string{
 			"Resolution: 1920x1080",
 			"Toggle Debug Mode: Off",
+			"Crosshair Selector",
 			"Back",
 		},
 		selected:         0,
