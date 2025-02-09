@@ -57,7 +57,7 @@ func init() {
 	}
 
 	// Load and prepare the status box background
-	caveImg, _, err := ebitenutil.NewImageFromFileSystem(assets.Slimes, "slimes/PNG/0.png")
+	caveImg, _, err := ebitenutil.NewImageFromFileSystem(assets.Resources, "resources/slimes/PNG/0.png")
 	if err != nil {
 		log.Fatalf("Failed to load image: %v", err)
 	}
@@ -114,7 +114,7 @@ func NewSprite(fileName string, width int) *AnimatedSprite {
 	spriteImage, ok := sprites[fileName]
 	if !ok {
 		var err error
-		spriteImage, _, err = ebitenutil.NewImageFromFileSystem(assets.Slimes, fileName) // Load the sprite image
+		spriteImage, _, err = ebitenutil.NewImageFromFileSystem(assets.Resources, fileName) // Load the sprite image
 		if err != nil {
 			panic(err)
 		}
@@ -132,12 +132,12 @@ func NewSprite(fileName string, width int) *AnimatedSprite {
 func NewSpritePack(slimeName string) *SpritePack {
 	sp := &SpritePack{}
 
-	sp.attack = NewSprite(fmt.Sprintf("slimes/PNG/%[1]s/Attack/%[1]s_Attack_full.png", slimeName), 10)
-	sp.death = NewSprite(fmt.Sprintf("slimes/PNG/%[1]s/Death/%[1]s_Death_full.png", slimeName), 10)
-	sp.hurt = NewSprite(fmt.Sprintf("slimes/PNG/%[1]s/Hurt/%[1]s_Hurt_full.png", slimeName), 5)
-	sp.idle = NewSprite(fmt.Sprintf("slimes/PNG/%[1]s/Idle/%[1]s_Idle_full.png", slimeName), 6)
-	sp.run = NewSprite(fmt.Sprintf("slimes/PNG/%[1]s/Run/%[1]s_Run_full.png", slimeName), 8)
-	sp.walk = NewSprite(fmt.Sprintf("slimes/PNG/%[1]s/Walk/%[1]s_Walk_full.png", slimeName), 8)
+	sp.attack = NewSprite(fmt.Sprintf("resources/slimes/PNG/%[1]s/Attack/%[1]s_Attack_full.png", slimeName), 10)
+	sp.death = NewSprite(fmt.Sprintf("resources/slimes/PNG/%[1]s/Death/%[1]s_Death_full.png", slimeName), 10)
+	sp.hurt = NewSprite(fmt.Sprintf("resources/slimes/PNG/%[1]s/Hurt/%[1]s_Hurt_full.png", slimeName), 5)
+	sp.idle = NewSprite(fmt.Sprintf("resources/slimes/PNG/%[1]s/Idle/%[1]s_Idle_full.png", slimeName), 6)
+	sp.run = NewSprite(fmt.Sprintf("resources/slimes/PNG/%[1]s/Run/%[1]s_Run_full.png", slimeName), 8)
+	sp.walk = NewSprite(fmt.Sprintf("resources/slimes/PNG/%[1]s/Walk/%[1]s_Walk_full.png", slimeName), 8)
 
 	return sp
 }

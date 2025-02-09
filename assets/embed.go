@@ -7,11 +7,11 @@ import (
 	"path"
 )
 
-//go:embed slimes
-var Slimes embed.FS
+//go:embed resources
+var Resources embed.FS
 
 func printEmbededFSFiles(dir string) {
-	entries, err := Slimes.ReadDir(dir)
+	entries, err := Resources.ReadDir(dir)
 	if err != nil {
 		log.Println(err) // Log and exit if there's an error
 		return

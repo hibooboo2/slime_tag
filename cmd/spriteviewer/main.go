@@ -42,7 +42,7 @@ func main() {
 	go viewer.HandleKeys()
 
 	var err error
-	spriteImage, _, err = ebitenutil.NewImageFromFileSystem(assets.Slimes, os.Args[1]) // Load the sprite image
+	spriteImage, _, err = ebitenutil.NewImageFromFileSystem(assets.Resources, os.Args[1]) // Load the sprite image
 	if err != nil {
 		panic(err)
 	}
