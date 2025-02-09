@@ -20,6 +20,7 @@ import (
 	"github.com/hajimehoshi/ebiten/v2/inpututil"
 	"github.com/hajimehoshi/ebiten/v2/text"
 	"github.com/hajimehoshi/ebiten/v2/vector"
+	"github.com/hibooboo2/slime_tag/assets"
 	"golang.org/x/image/font"
 	"golang.org/x/image/font/gofont/goregular"
 	"golang.org/x/image/font/opentype"
@@ -56,7 +57,7 @@ func init() {
 	}
 
 	// Load and prepare the status box background
-	caveImg, _, err := ebitenutil.NewImageFromFileSystem(slimes, "slimes/PNG/0.png")
+	caveImg, _, err := ebitenutil.NewImageFromFileSystem(assets.Slimes, "slimes/PNG/0.png")
 	if err != nil {
 		log.Fatalf("Failed to load image: %v", err)
 	}
@@ -113,7 +114,7 @@ func NewSprite(fileName string, width int) *AnimatedSprite {
 	spriteImage, ok := sprites[fileName]
 	if !ok {
 		var err error
-		spriteImage, _, err = ebitenutil.NewImageFromFileSystem(slimes, fileName) // Load the sprite image
+		spriteImage, _, err = ebitenutil.NewImageFromFileSystem(assets.Slimes, fileName) // Load the sprite image
 		if err != nil {
 			panic(err)
 		}
