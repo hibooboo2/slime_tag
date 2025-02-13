@@ -65,12 +65,16 @@ func (v *Viewer) HandleKeys() {
 		switch event.Key {
 		case ebiten.KeyArrowUp:
 			v.spriteY--
+			v.viewY--
 		case ebiten.KeyArrowDown:
 			v.spriteY++
+			v.viewY++
 		case ebiten.KeyArrowLeft:
 			v.spriteX--
+			v.viewX--
 		case ebiten.KeyArrowRight:
 			v.spriteX++
+			v.viewX++
 		case ebiten.KeyEqual:
 			v.spriteSize++
 		case ebiten.KeyMinus:
@@ -83,6 +87,7 @@ func (v *Viewer) HandleKeys() {
 		}
 
 		// Ensure sprite is within screen bounds
+
 		if v.spriteX < 0 {
 			v.spriteX = 0
 		} else if v.spriteX+v.spriteSize >= screenWidth {
@@ -94,7 +99,25 @@ func (v *Viewer) HandleKeys() {
 			v.spriteY = screenHeight - v.spriteSize
 		}
 
-		viewerPanelRect := v.getViewerPanelRect()
+		x, y := spriteImage.Size()
+
+		if ((v.viewX + 1) * (v.spriteSize)) >= x {
+			v.viewX -= 2
+		}
+
+		if ((v.viewY + 1) * (v.spriteSize)) >= y {
+			v.viewY -= 2
+		}
+
+		if v.viewX < 0 {
+			v.viewX = 0
+		}
+
+		if v.viewY < 0 {
+			v.viewY = 0
+		}
+
+		// viewerPanelRect := v.getViewerPanelRect()
 
 	}
 }
@@ -143,13 +166,13 @@ func (v *Viewer) Draw(screen *ebiten.Image) {
 	screen.DrawImage(img, op2)
 
 	cursor := v.getSubImage(spriteImage, 5, 26, 32)
-	img2 := ebiten.NewImageFromImage(cursor)
+	cursorImage := ebiten.NewImageFromImage(cursor)
 
-	op3 := &ebiten.DrawImageOptions{}
-	op3.GeoM.Translate(float64(screenWidth)/4, float64(screenHeight)/4)
-	op3.GeoM.Translate(float64(v.spriteX-v.viewX)*float64(v.spriteSize), float64(v.spriteY-v.viewY)*float64(v.spriteSize))
+	cursorTranslation := &ebiten.DrawImageOptions{}
+	cursorTranslation.GeoM.Translate(float64(screenWidth)/4, float64(screenHeight)/4)
+	cursorTranslation.GeoM.Translate(float64(v.spriteX-v.viewX)*float64(v.spriteSize), float64(v.spriteY-v.viewY)*float64(v.spriteSize))
 
-	screen.DrawImage(img2, op3)
+	screen.DrawImage(cursorImage, cursorTranslation)
 }
 
 func (v *Viewer) Layout(outsideWidth, outsideHeight int) (screenWidth, screenHeight int) {
