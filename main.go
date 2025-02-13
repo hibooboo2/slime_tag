@@ -341,6 +341,8 @@ func (ft *FloatingText) Draw(screen *ebiten.Image) {
 }
 
 type Game struct {
+	sprites           *ebiten.Image
+	entities          []any
 	menuOptions       []string
 	resolutionOptions []string
 	selected          int
@@ -936,9 +938,6 @@ func drawHPBar(screen *ebiten.Image, x, y float64, hpBar *HPBar, hpColor color.C
 }
 
 func (g *Game) drawGameView(screen *ebiten.Image) {
-	// Game drawing logic goes here
-	ebitenutil.DebugPrint(screen, "Game is running...")
-
 	if g.frameCount%10 == 0 {
 		g.setDebugLogFirstSlot(fmt.Sprintf("loc: %f,%f", g.player.x, g.player.y))
 	}
@@ -1007,6 +1006,8 @@ func (g *Game) drawGameView(screen *ebiten.Image) {
 		isDone, subImage := sprite.GetCurrentSprite(g.frameCount, enemy.movementAngle)
 		if !(enemy.hpBar.currentHP <= 0 && isDone) {
 			newEnemies = append(newEnemies, enemy)
+		} else {
+			g.AddHeadStone(int(enemy.x), int(enemy.y))
 		}
 
 		// Draw the sub-image
@@ -1032,6 +1033,18 @@ func (g *Game) drawGameView(screen *ebiten.Image) {
 	for _, ft := range g.floatingTexts {
 		ft.Draw(screen)
 	}
+
+	newEntities := make([]any, 0, len(g.entities))
+	for _, entity := range g.entities {
+		drawer, ok := entity.(Drawer)
+		if ok {
+			drawer.Draw(screen, g)
+			if !drawer.Remove() {
+				newEntities = append(newEntities, entity)
+			}
+		}
+	}
+	g.entities = newEntities
 }
 
 func (g *Game) setDebugLogFirstSlot(log string) {
@@ -1047,6 +1060,44 @@ func (g *Game) addDebugLog(log string) {
 		g.debugLogs = g.debugLogs[1:]
 	}
 	g.debugLogs = append(g.debugLogs, log)
+}
+
+type Sprite struct {
+	locX, locY       int
+	spriteX, spriteY int
+	size             int
+}
+
+type HeadStone struct {
+	Sprite
+	deathTime time.Time
+}
+
+type Drawer interface {
+	Draw(screen *ebiten.Image, g *Game)
+	Remove() bool
+}
+
+func (hs *Sprite) Draw(screen *ebiten.Image, g *Game) {
+	img := g.sprites.SubImage(image.Rect(hs.spriteX*hs.size, hs.spriteY*hs.size, (hs.spriteX*hs.size)+hs.size, (hs.spriteY*hs.size)+hs.size))
+	op := &ebiten.DrawImageOptions{}
+	op.GeoM.Translate(float64(hs.locX), float64(hs.locY))
+	screen.DrawImage(img.(*ebiten.Image), op)
+}
+
+func (hs *Sprite) Remove() bool {
+	return false
+}
+
+func (hs *HeadStone) Remove() bool {
+	if time.Since(hs.deathTime) >= 5*time.Second {
+		return true
+	}
+	return false
+}
+
+func (g *Game) AddHeadStone(x, y int) {
+	g.entities = append(g.entities, &HeadStone{Sprite: Sprite{locX: x, locY: y, spriteX: 47 + rand.Intn(5), spriteY: 0, size: 32}, deathTime: time.Now()})
 }
 
 func (g *Game) drawDebugLogs(screen *ebiten.Image) {
@@ -1283,6 +1334,11 @@ func GetMaxScreenSize() (int, int) {
 func main() {
 	// Get the maximum screen size for the primary monitor
 	// screenWidth, screenHeight = GetMaxScreenSize()
+	sprites, _, err := ebitenutil.NewImageFromFileSystem(assets.Resources, "resources/slimes/ProjectUtumno_full.png") // Load the sprite image
+	if err != nil {
+		panic(err)
+	}
+
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
 		log.Fatalf("Error getting home directory: %v", err)
@@ -1333,6 +1389,7 @@ func main() {
 		lastLogTime:      time.Now(),
 		scaleFactor:      1.0,
 		debugMode:        settings.DebugMode,
+		sprites:          sprites,
 	}
 
 	if game.debugMode {
