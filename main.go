@@ -158,7 +158,7 @@ func (sprite *AnimatedSprite) GetCurrentSprite(frameCount int, movementAngle flo
 		fps = 60
 	}
 
-	if frameCount%(fps/7) == 0 {
+	if fps > 7 && frameCount%(fps/7) == 0 {
 		sprite.frame++
 	}
 
