@@ -1097,7 +1097,7 @@ func (hs *HeadStone) Remove() bool {
 }
 
 func (g *Game) AddHeadStone(x, y int) {
-	g.entities = append(g.entities, &HeadStone{Sprite: Sprite{locX: x, locY: y, spriteX: 47 + rand.Intn(5), spriteY: 0, size: 32}, deathTime: time.Now()})
+	g.entities = append(g.entities, &HeadStone{Sprite: Sprite{locX: x, locY: y, spriteX: 0 + rand.Intn(5), spriteY: 1, size: 32}, deathTime: time.Now()})
 }
 
 func (g *Game) drawDebugLogs(screen *ebiten.Image) {
