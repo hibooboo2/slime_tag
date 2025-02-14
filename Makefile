@@ -14,6 +14,4 @@ spriteviewer:
 
 .PHONY: mapmaker
 mapmaker:
-	go mod tidy
-	GOOS=windows go build -o mapmaker.exe cmd/mapmaker/*.go
-	./mapmaker.exe
+	cd cmd/mapmaker && python3 -m http.server 8000
