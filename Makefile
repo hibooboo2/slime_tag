@@ -10,3 +10,10 @@ spriteviewer:
 	go mod tidy
 	GOOS=windows go build -o spriteviewer.exe cmd/spriteviewer/*.go
 	./spriteviewer.exe $(file)
+
+
+.PHONY: mapmaker
+mapmaker:
+	go mod tidy
+	GOOS=windows go build -o mapmaker.exe cmd/mapmaker/*.go
+	./mapmaker.exe

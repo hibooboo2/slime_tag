@@ -1,0 +1,132 @@
+<body>
+    <div id="root">
+        <div class="grid-container"></div>
+        <div class="right-panel">
+            <button id="saveButton">Save Selection</button>
+            <div class="sprite-selector">
+                <div class="sprite-sheet" style="background-image: url('/sprites.png');"></div>
+            </div>
+        </div>
+    </div>
+    <style>
+        #root {
+            display: flex;
+            gap: 20px;
+        }
+        .grid-container {
+            display: grid;
+            grid-template-columns: repeat(40, 32px);
+            grid-template-rows: repeat(20, 32px);
+            max-height: 80%;
+            gap: 2px;
+        }
+        .grid-cell {
+            width: 32px;
+            height: 32px;
+            border: 1px solid #ccc;
+            cursor: pointer;
+        }
+        .right-panel {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+        .sprite-selector {
+            position: relative;
+            width: 500px;
+            height: 75%;
+            overflow: auto;
+            border: 2px solid #ccc;
+        }
+        .sprite-sheet {
+            position: absolute;
+            cursor: pointer;
+            background-color: black;
+        }
+        #saveButton {
+            width: 100%;
+            padding: 10px 20px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            cursor: pointer;
+        }
+    </style>
+    <script>
+        let selectedSprite = {x: 0, y: 0};
+        const gridContainer = document.querySelector('.grid-container');
+        const spriteSheet = document.querySelector('.sprite-sheet');
+        const saveButton = document.getElementById('saveButton');
+
+        // Set sprite sheet dimensions
+        const spriteImage = new Image();
+        spriteImage.src = '/sprites.png';
+        spriteImage.onload = function() {
+            spriteSheet.style.width = `${this.width}px`;
+            spriteSheet.style.height = `${this.height}px`;
+        };
+
+        // Initialize grid
+        for (let i = 0; i < 40 * 20; i++) {
+            const cell = document.createElement('div');
+            cell.classList.add('grid-cell');
+            cell.dataset.id = i;
+            cell.addEventListener('click', placeSprite);
+            cell.addEventListener('contextmenu', removeSprite);
+            gridContainer.appendChild(cell);
+        }
+
+        // Handle sprite selection
+        spriteSheet.addEventListener('click', (e) => {
+            const rect = spriteSheet.getBoundingClientRect();
+            const x = Math.floor((e.clientX - rect.left) / 32) * 32;
+            const y = Math.floor((e.clientY - rect.top) / 32) * 32;
+            selectedSprite = {x, y};
+            spriteSheet.style.outline = `2px solid blue`;
+            spriteSheet.style.outlineOffset = `-2px`;
+        });
+
+        function placeSprite(e) {
+            if (selectedSprite) {
+                e.target.style.backgroundImage = `url('sprites.png')`;
+                e.target.style.backgroundPosition = `-${selectedSprite.x}px -${selectedSprite.y}px`;
+                e.target.style.backgroundSize = 'auto';
+            }
+        }
+
+        function removeSprite(e) {
+            e.preventDefault();
+            e.target.style.backgroundImage = '';
+            e.target.style.backgroundPosition = '';
+            e.target.style.backgroundSize = '';
+        }
+
+        function downloadJSON(data, filename) {
+            const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+
+        saveButton.addEventListener('click', () => {
+            const gridData = [];
+            document.querySelectorAll('.grid-cell').forEach(cell => {
+                if (cell.style.backgroundImage) {
+                    gridData.push({
+                        id: cell.dataset.id,
+                        x: parseInt(cell.style.backgroundPositionX),
+                        y: parseInt(cell.style.backgroundPositionY)
+                    });
+                }
+            });
+            downloadJSON(gridData, 'grid_data.json');
+            console.log('Saved grid data:', gridData);
+            alert('Grid data saved! Check console for details.');
+        });
+    </script>
+</body>
