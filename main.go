@@ -21,6 +21,7 @@ import (
 	"github.com/hajimehoshi/ebiten/v2/text"
 	"github.com/hajimehoshi/ebiten/v2/vector"
 	"github.com/hibooboo2/slime_tag/assets"
+	"github.com/hibooboo2/slime_tag/ecs"
 	"golang.org/x/image/font"
 	"golang.org/x/image/font/gofont/goregular"
 	"golang.org/x/image/font/opentype"
@@ -292,9 +293,22 @@ type PowerUp struct {
 	x, y      float64
 	spawnTime time.Time
 	bonus     int
+	collided  bool
 }
 
-func (pu *PowerUp) Overlaps(r image.Rectangle, g *Game) {
+func (pu *PowerUp) Overlaps(r image.Rectangle, game ecs.Game) bool {
+	g := game.(*Game)
+	powerupRect := image.Rect(
+		int(pu.x)-20, int(pu.y)-20,
+		int(pu.x)+20, int(pu.y)+20,
+	)
+
+	pu.collided = powerupRect.Overlaps(r)
+
+	if !pu.collided {
+		return false
+	}
+
 	switch pu.bonus {
 	case 0:
 		g.player.hpBar.AddHP(20)
@@ -303,9 +317,12 @@ func (pu *PowerUp) Overlaps(r image.Rectangle, g *Game) {
 		g.player.hpBar.AddHP(-10)
 		g.AddFloatingText("-10 HP", float64(pu.x), float64(pu.y), color.RGBA{255, 0, 0, 255})
 	}
+
+	return true
 }
 
-func (pu *PowerUp) Draw(screen *ebiten.Image, g *Game) {
+func (pu *PowerUp) Draw(screen *ebiten.Image, game ecs.Game) {
+	g := game.(*Game)
 	// Draw the power-up icon at its location
 	op := &ebiten.DrawImageOptions{}
 	op.GeoM.Translate(pu.x, pu.y)
@@ -317,7 +334,8 @@ func (pu *PowerUp) Remove() bool {
 	return time.Since(pu.spawnTime) > time.Second*10
 }
 
-var _ Drawer = &PowerUp{}
+var _ ecs.Drawer = &PowerUp{}
+var _ ecs.Overlapper = &PowerUp{}
 
 type FloatingText struct {
 	text      string
@@ -367,7 +385,7 @@ func (ft *FloatingText) Draw(screen *ebiten.Image) {
 
 type Game struct {
 	sprites           *ebiten.Image
-	entities          []any
+	entities          *ecs.Entities
 	menuOptions       []string
 	resolutionOptions []string
 	selected          int
@@ -659,7 +677,7 @@ func (g *Game) checkEnemyBulletCollisions() {
 
 					// Spawn a power-up every 5 enemies killed
 					if g.enemiesKilled%5 == 0 {
-						g.entities = append(g.entities, NewRandomPowerUp())
+						g.entities.Add(NewRandomPowerUp())
 					}
 				}
 				collided = true
@@ -704,8 +722,8 @@ func (g *Game) checkPlayerCollisionsAndAffects() {
 		}
 	}
 	// Check for headstone collisions
-	for _, entitiy := range g.entities {
-		if e, ok := entitiy.(Overlapper); ok {
+	for _, entitiy := range *g.entities {
+		if e, ok := entitiy.(ecs.Overlapper); ok {
 			// Define the player's bounding rectangle
 			playerRect := image.Rect(
 				int(g.player.x)-20, int(g.player.y)-20,
@@ -820,7 +838,7 @@ func (g *Game) Update() error {
 	// Check for bullet collisions with enemies
 	g.checkEnemyBulletCollisions()
 
-	if g.frameCount%10 == 0 {
+	if g.frameCount%5 == 0 {
 		// Check for enemy collisions with the player
 		g.checkPlayerCollisionsAndAffects()
 
@@ -859,8 +877,7 @@ func (g *Game) Update() error {
 	}
 
 	if time.Since(g.lastPowerUpSpawn) >= 10*time.Second {
-		p := NewRandomPowerUp()
-		g.entities = append(g.entities, p)
+		g.entities.Add(NewRandomPowerUp())
 		g.lastPowerUpSpawn = time.Now()
 	}
 	// Update floating texts
@@ -1024,17 +1041,7 @@ func (g *Game) drawGameView(screen *ebiten.Image) {
 		ft.Draw(screen)
 	}
 
-	newEntities := make([]any, 0, len(g.entities))
-	for _, entity := range g.entities {
-		drawer, ok := entity.(Drawer)
-		if ok {
-			drawer.Draw(screen, g)
-			if !drawer.Remove() {
-				newEntities = append(newEntities, entity)
-			}
-		}
-	}
-	g.entities = newEntities
+	g.entities.Draw(screen, g)
 }
 
 func (g *Game) setDebugLogFirstSlot(log string) {
@@ -1064,16 +1071,12 @@ type HeadStone struct {
 	collidedWithPlayer bool
 }
 
-type Drawer interface {
-	Draw(screen *ebiten.Image, g *Game)
-	Remove() bool
-}
+var _ ecs.Drawer = &HeadStone{}
+var _ ecs.Overlapper = &HeadStone{}
 
-type Overlapper interface {
-	Overlaps(image.Rectangle, *Game) bool
-}
+func (hs *Sprite) Draw(screen *ebiten.Image, game ecs.Game) {
+	g := game.(*Game)
 
-func (hs *Sprite) Draw(screen *ebiten.Image, g *Game) {
 	img := g.sprites.SubImage(image.Rect(hs.spriteX*hs.size, hs.spriteY*hs.size, (hs.spriteX*hs.size)+hs.size, (hs.spriteY*hs.size)+hs.size))
 	op := &ebiten.DrawImageOptions{}
 	op.GeoM.Translate(float64(hs.locX), float64(hs.locY))
@@ -1092,7 +1095,8 @@ func (hs *HeadStone) Remove() bool {
 	return false
 }
 
-func (hs *HeadStone) Overlaps(r image.Rectangle, g *Game) bool {
+func (hs *HeadStone) Overlaps(r image.Rectangle, game ecs.Game) bool {
+	g := game.(*Game)
 	if hs.collidedWithPlayer {
 		log.Printf("Headstone already collided: %t", hs.collidedWithPlayer)
 		return true
@@ -1113,7 +1117,7 @@ func (hs *HeadStone) Overlaps(r image.Rectangle, g *Game) bool {
 }
 
 func (g *Game) AddHeadStone(x, y int) {
-	g.entities = append(g.entities, &HeadStone{Sprite: Sprite{locX: x, locY: y, spriteX: 0 + rand.Intn(5), spriteY: 1, size: 32}, deathTime: time.Now()})
+	g.entities.Add(&HeadStone{Sprite: Sprite{locX: x, locY: y, spriteX: 0 + rand.Intn(5), spriteY: 1, size: 32}, deathTime: time.Now()})
 }
 
 func (g *Game) drawDebugLogs(screen *ebiten.Image) {
@@ -1386,6 +1390,7 @@ func main() {
 			"Crosshair Selector",
 			"Back",
 		},
+		entities:         &ecs.Entities{},
 		selected:         0,
 		settingsSelected: 0,
 		inMainMenu:       false,
