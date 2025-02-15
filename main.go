@@ -704,16 +704,16 @@ func (g *Game) checkPlayerCollisionsAndAffects() {
 		}
 	}
 	// Check for headstone collisions
-	for _, headstone := range g.entities {
-		if hs, ok := headstone.(Overlapper); ok {
+	for _, entitiy := range g.entities {
+		if e, ok := entitiy.(Overlapper); ok {
 			// Define the player's bounding rectangle
 			playerRect := image.Rect(
-				int(g.player.x)-16, int(g.player.y)-16,
-				int(g.player.x)+16, int(g.player.y)+16,
+				int(g.player.x)-20, int(g.player.y)-20,
+				int(g.player.x)+20, int(g.player.y)+20,
 			)
 			// Check for collision
-			if hs.Overlaps(playerRect, g) {
-				continue // Skip adding this headstone to the new list
+			if e.Overlaps(playerRect, g) {
+				log.Printf("Player overlapped with object.")
 			}
 		}
 		// Append headstone to newHeadstones
@@ -1085,7 +1085,7 @@ func (hs *Sprite) Remove() bool {
 }
 
 func (hs *HeadStone) Remove() bool {
-	if time.Since(hs.deathTime) >= 5*time.Second || hs.collidedWithPlayer {
+	if hs.collidedWithPlayer || time.Since(hs.deathTime) >= 5*time.Second {
 		log.Printf("Player headstone removal. Collision: %t", hs.collidedWithPlayer)
 		return true
 	}
@@ -1093,6 +1093,11 @@ func (hs *HeadStone) Remove() bool {
 }
 
 func (hs *HeadStone) Overlaps(r image.Rectangle, g *Game) bool {
+	if hs.collidedWithPlayer {
+		log.Printf("Headstone already collided: %t", hs.collidedWithPlayer)
+		return true
+	}
+
 	// Define the headstone's bounding rectangle
 	headstoneRect := image.Rect(
 		hs.locX, hs.locY,
@@ -1100,7 +1105,9 @@ func (hs *HeadStone) Overlaps(r image.Rectangle, g *Game) bool {
 	)
 	hs.collidedWithPlayer = headstoneRect.Overlaps(r)
 	if hs.collidedWithPlayer {
-		g.headstonesCollected++ // Increment headstones collected
+		g.headstonesCollected += 1 // Increment headstones collected
+		log.Printf("Headstone collided: %t adding point", hs.collidedWithPlayer)
+		log.Printf("Headstones collected: %d", g.headstonesCollected)
 	}
 	return hs.collidedWithPlayer
 }
@@ -1154,7 +1161,7 @@ func (g *Game) drawSettings(screen *ebiten.Image) {
 
 func (g *Game) drawGameOver(screen *ebiten.Image) {
 	ebitenutil.DebugPrintAt(screen, "Game Over", 300, 150)
-	ebitenutil.DebugPrintAt(screen, fmt.Sprintf("Score: %d", g.enemiesKilled*100), 300, 200)
+	ebitenutil.DebugPrintAt(screen, fmt.Sprintf("Score: %d", (g.enemiesKilled*100)+(g.headstonesCollected*500)), 300, 200)
 	ebitenutil.DebugPrintAt(screen, "Press R to restart", 300, 250)
 }
 
@@ -1163,10 +1170,11 @@ type StatusBox struct {
 	x, y          float32
 	enemies       int
 	killed        int
+	headstones    int
 	scale         float32
 }
 
-func drawStatusBox(screen *ebiten.Image, box *StatusBox) {
+func (box *StatusBox) Draw(screen *ebiten.Image, g *Game) {
 	// Calculate scale based on both dimensions
 	baseWidth := float32(1920)
 	baseHeight := float32(1080)
@@ -1202,7 +1210,7 @@ func drawStatusBox(screen *ebiten.Image, box *StatusBox) {
 	}{
 		{"Enemies:", fmt.Sprintf("%d", box.enemies), box.height * 0.25},
 		{"Kills:", fmt.Sprintf("%d", box.killed), box.height * 0.45},
-		{"Score:", fmt.Sprintf("%d", box.killed*100), box.height * 0.65},
+		{"Score:", fmt.Sprintf("%d", (box.killed*100)+(500*box.headstones)), box.height * 0.65},
 		{"FPS:", fmt.Sprintf("%.0f", ebiten.ActualFPS()), box.height * 0.85},
 	}
 
@@ -1237,18 +1245,22 @@ func drawStatusBox(screen *ebiten.Image, box *StatusBox) {
 }
 
 func (g *Game) Draw(screen *ebiten.Image) {
+	// Get the current screen size
+	screenWidth, screenHeight := screen.Size()
+
 	// Draw the game background if needed
 	// screen.DrawImage(backgroundImage, nil) // Uncomment if you have a separate game background
 
 	// Create a status box object
 	statusBox := &StatusBox{
-		width:   float32(screenWidth) * 0.2,
-		height:  float32(screenHeight) * 0.15,
-		x:       float32(screenWidth) - (float32(screenWidth)*0.2 - 20),
-		y:       20,
-		enemies: len(g.enemies),
-		killed:  g.enemiesKilled,
-		scale:   g.scaleFactor,
+		width:      float32(screenWidth) * 0.2,
+		height:     float32(screenHeight) * 0.15,
+		x:          float32(screenWidth) - (float32(screenWidth)*0.2 - 20),
+		y:          20,
+		enemies:    len(g.enemies),
+		killed:     g.enemiesKilled,
+		headstones: g.headstonesCollected,
+		scale:      g.scaleFactor,
 	}
 
 	// Draw the status box background
@@ -1276,22 +1288,7 @@ func (g *Game) Draw(screen *ebiten.Image) {
 
 	g.drawGameView(screen)
 
-	// Get the current screen size
-	screenWidth, screenHeight := screen.Size()
-
-	// Create a status box object
-	statusBox = &StatusBox{
-		width:   float32(screenWidth) * 0.2,
-		height:  float32(screenHeight) * 0.08,
-		x:       float32(screenWidth) - (float32(screenWidth) * 0.2) - 20,
-		y:       20,
-		enemies: len(g.enemies),
-		killed:  g.enemiesKilled,
-		scale:   g.scaleFactor,
-	}
-
-	// Draw the status box
-	drawStatusBox(screen, statusBox)
+	statusBox.Draw(screen, g)
 
 	if g.gameOver {
 		g.drawGameOver(screen)
