@@ -294,6 +294,31 @@ type PowerUp struct {
 	bonus     int
 }
 
+func (pu *PowerUp) Overlaps(r image.Rectangle, g *Game) {
+	switch pu.bonus {
+	case 0:
+		g.player.hpBar.AddHP(20)
+		g.AddFloatingText("+20 HP", float64(pu.x), float64(pu.y), color.RGBA{0, 255, 0, 255})
+	case 1:
+		g.player.hpBar.AddHP(-10)
+		g.AddFloatingText("-10 HP", float64(pu.x), float64(pu.y), color.RGBA{255, 0, 0, 255})
+	}
+}
+
+func (pu *PowerUp) Draw(screen *ebiten.Image, g *Game) {
+	// Draw the power-up icon at its location
+	op := &ebiten.DrawImageOptions{}
+	op.GeoM.Translate(pu.x, pu.y)
+	_, img := pu.icon.GetCurrentSprite(g.frameCount, 0)
+	screen.DrawImage(img, op)
+}
+
+func (pu *PowerUp) Remove() bool {
+	return time.Since(pu.spawnTime) > time.Second*10
+}
+
+var _ Drawer = &PowerUp{}
+
 type FloatingText struct {
 	text      string
 	x, y      float64
@@ -362,14 +387,15 @@ type Game struct {
 	lastEnemySpawn    time.Time     // Track when we last spawned an enemy
 	spawnInterval     time.Duration // Current interval between enemy spawns
 	scaleFactor       float32       // Add this line to define scaleFactor
-	powerUps          []*PowerUp
-	lastPowerUpSpawn  time.Time // Add this line to track the last power-up spawn time
+	lastPowerUpSpawn  time.Time     // Add this line to track the last power-up spawn time
 	floatingTexts     []*FloatingText
 	settingsOptions   []string
 	settingsSelected  int
 	debugMode         bool
 	showResolutions   bool // Whether to show resolution popup
 	resolutionIdx     int  // Currently selected resolution
+
+	headstonesCollected int // Add this line to track collected headstones
 }
 
 type KeyEvent struct {
@@ -633,7 +659,7 @@ func (g *Game) checkEnemyBulletCollisions() {
 
 					// Spawn a power-up every 5 enemies killed
 					if g.enemiesKilled%5 == 0 {
-						g.powerUps = append(g.powerUps, NewRandomPowerUp())
+						g.entities = append(g.entities, NewRandomPowerUp())
 					}
 				}
 				collided = true
@@ -677,38 +703,21 @@ func (g *Game) checkPlayerCollisionsAndAffects() {
 			}
 		}
 	}
-
-	// Check for power up collisions
-	newPowerUps := []*PowerUp{}
-	for _, powerUp := range g.powerUps {
-		// Define the power-up's bounding rectangle
-		powerUpRect := image.Rect(
-			int(powerUp.x)-15, int(powerUp.y)-15,
-
-			int(powerUp.x)+15, int(powerUp.y)+15,
-		)
-
-		// Define the player's bounding rectangle
-		playerRect := image.Rect(
-			int(g.player.x)-16, int(g.player.y)-16,
-			int(g.player.x)+16, int(g.player.y)+16,
-		)
-
-		// Check for collision
-		if playerRect.Overlaps(powerUpRect) {
-			switch powerUp.bonus {
-			case 0:
-				g.player.hpBar.AddHP(20)
-				g.AddFloatingText("+20 HP", float64(powerUp.x), float64(powerUp.y), color.RGBA{0, 255, 0, 255})
-			case 1:
-				g.player.hpBar.AddHP(-10)
-				g.AddFloatingText("-10 HP", float64(powerUp.x), float64(powerUp.y), color.RGBA{255, 0, 0, 255})
+	// Check for headstone collisions
+	for _, headstone := range g.entities {
+		if hs, ok := headstone.(Overlapper); ok {
+			// Define the player's bounding rectangle
+			playerRect := image.Rect(
+				int(g.player.x)-16, int(g.player.y)-16,
+				int(g.player.x)+16, int(g.player.y)+16,
+			)
+			// Check for collision
+			if hs.Overlaps(playerRect, g) {
+				continue // Skip adding this headstone to the new list
 			}
-		} else {
-			newPowerUps = append(newPowerUps, powerUp)
 		}
+		// Append headstone to newHeadstones
 	}
-	g.powerUps = newPowerUps
 }
 
 func (g *Game) Update() error {
@@ -851,17 +860,9 @@ func (g *Game) Update() error {
 
 	if time.Since(g.lastPowerUpSpawn) >= 10*time.Second {
 		p := NewRandomPowerUp()
-		g.powerUps = append(g.powerUps, p)
+		g.entities = append(g.entities, p)
 		g.lastPowerUpSpawn = time.Now()
 	}
-
-	newPowerUps := []*PowerUp{}
-	for _, powerUp := range g.powerUps {
-		if time.Since(powerUp.spawnTime) < time.Second*10 {
-			newPowerUps = append(newPowerUps, powerUp)
-		}
-	}
-	g.powerUps = newPowerUps
 	// Update floating texts
 	var activeTexts []*FloatingText
 	for _, ft := range g.floatingTexts {
@@ -871,8 +872,6 @@ func (g *Game) Update() error {
 		}
 	}
 	g.floatingTexts = activeTexts
-
-	log.Printf("Enemies Killed: %d, Current Spawn Interval: %v", g.enemiesKilled, g.spawnInterval)
 
 	return nil
 }
@@ -1020,15 +1019,6 @@ func (g *Game) drawGameView(screen *ebiten.Image) {
 		vector.DrawFilledCircle(screen, bullet.x, bullet.y, 3, color.RGBA{255, 255, 255, 255}, true) // White circle for bullets
 	}
 
-	// Draw power-ups
-	for _, powerUp := range g.powerUps {
-		// Draw the power-up icon at its location
-		op := &ebiten.DrawImageOptions{}
-		op.GeoM.Translate(powerUp.x, powerUp.y)
-		_, img := powerUp.icon.GetCurrentSprite(g.frameCount, 0)
-		screen.DrawImage(img, op)
-	}
-
 	// Draw floating texts
 	for _, ft := range g.floatingTexts {
 		ft.Draw(screen)
@@ -1070,12 +1060,17 @@ type Sprite struct {
 
 type HeadStone struct {
 	Sprite
-	deathTime time.Time
+	deathTime          time.Time
+	collidedWithPlayer bool
 }
 
 type Drawer interface {
 	Draw(screen *ebiten.Image, g *Game)
 	Remove() bool
+}
+
+type Overlapper interface {
+	Overlaps(image.Rectangle, *Game) bool
 }
 
 func (hs *Sprite) Draw(screen *ebiten.Image, g *Game) {
@@ -1090,10 +1085,24 @@ func (hs *Sprite) Remove() bool {
 }
 
 func (hs *HeadStone) Remove() bool {
-	if time.Since(hs.deathTime) >= 5*time.Second {
+	if time.Since(hs.deathTime) >= 5*time.Second || hs.collidedWithPlayer {
+		log.Printf("Player headstone removal. Collision: %t", hs.collidedWithPlayer)
 		return true
 	}
 	return false
+}
+
+func (hs *HeadStone) Overlaps(r image.Rectangle, g *Game) bool {
+	// Define the headstone's bounding rectangle
+	headstoneRect := image.Rect(
+		hs.locX, hs.locY,
+		hs.locX+hs.size, hs.locY+hs.size,
+	)
+	hs.collidedWithPlayer = headstoneRect.Overlaps(r)
+	if hs.collidedWithPlayer {
+		g.headstonesCollected++ // Increment headstones collected
+	}
+	return hs.collidedWithPlayer
 }
 
 func (g *Game) AddHeadStone(x, y int) {
