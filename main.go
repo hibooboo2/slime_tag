@@ -459,38 +459,6 @@ func (ft *FloatingText) Draw(screen *ebiten.Image) {
 	text.Draw(screen, ft.text, gameFont, int(ft.x), int(ft.y), clr)
 }
 
-type Game struct {
-	sprites           *ebiten.Image
-	entities          *ecs.Entities
-	menuOptions       []string
-	resolutionOptions []string
-	selected          int
-	inMainMenu        bool
-	keys              *Keys
-	exit              bool
-	player            *Player
-	debugLogs         []string
-	lastLogTime       time.Time
-	settings          bool
-	bullets           []*Bullet
-	frameCount        int // Add a frame counter
-	gamepads          []ebiten.GamepadID
-	enemiesKilled     int           // Add a field to track the number of enemies killed
-	gameOver          bool          // Add a field to track if the game is over
-	lastEnemySpawn    time.Time     // Track when we last spawned an enemy
-	spawnInterval     time.Duration // Current interval between enemy spawns
-	scaleFactor       float32       // Add this line to define scaleFactor
-	lastPowerUpSpawn  time.Time     // Add this line to track the last power-up spawn time
-	floatingTexts     []*FloatingText
-	settingsOptions   []string
-	settingsSelected  int
-	debugMode         bool
-	showResolutions   bool // Whether to show resolution popup
-	resolutionIdx     int  // Currently selected resolution
-
-	headstonesCollected int // Add this line to track collected headstones
-}
-
 type KeyEvent struct {
 	Key     ebiten.Key
 	Pressed time.Duration
@@ -711,84 +679,6 @@ func (g *Game) handleGamepadInput() bool {
 	return len(g.gamepads) > 0
 }
 
-func (g *Game) checkEnemyBulletCollisions() {
-	var remainingBullets []*Bullet
-	for _, bullet := range g.bullets {
-		collided := false
-		for _, e := range *g.entities {
-			enemy, ok := e.(*Enemy)
-			if !ok {
-				continue
-			}
-			if enemy.hpBar.currentHP < 1 {
-				continue
-			}
-			// Define the enemy's bounding rectangle
-
-			// EMEMY HIT BOX IS 32px *32px
-			enemyRect := image.Rect(
-				int(enemy.x)+16, int(enemy.y)+16,
-				int(enemy.x)+enemy.sprites.idle.frameWidth-16,
-				int(enemy.y)+enemy.sprites.idle.frameHeight-16,
-			)
-
-			// Check if the bullet is within the enemy's rectangle
-			// The enemy is hit by bullets here wihch are a radius of 3px
-			if enemyRect.Min.X <= int(bullet.x)+3 && int(bullet.x)-3 <= enemyRect.Max.X &&
-				enemyRect.Min.Y <= int(bullet.y)+3 && int(bullet.y)-3 <= enemyRect.Max.Y {
-				// Collision detected
-				enemy.hpBar.currentHP -= 20
-				enemy.hpBar.lastDamageTime = time.Now()
-				enemy.hpBar.visible = true
-				if enemy.hpBar.currentHP <= 0 {
-					g.enemiesKilled++                                                              // Increment the enemies killed count
-					g.AddFloatingText("+5 HP", g.player.x, g.player.y, color.RGBA{0, 255, 0, 255}) // Add healing text
-					g.player.hpBar.AddHP(5)
-
-					// Reduce spawn interval by 15ms per kill, with a minimum of 100ms
-					g.spawnInterval -= 15 * time.Millisecond
-					if g.spawnInterval < 100*time.Millisecond {
-						g.spawnInterval = 100 * time.Millisecond // Ensure a minimum spawn interval
-					}
-
-					// Log the current spawn interval to the debug log
-					g.addDebugLog(fmt.Sprintf("Current Spawn Interval: %v", g.spawnInterval))
-
-					// Spawn a power-up every 5 enemies killed
-					if g.enemiesKilled%5 == 0 {
-						g.entities.Add(NewRandomPowerUp())
-					}
-				}
-				collided = true
-				break
-			}
-
-		}
-		if !collided {
-			remainingBullets = append(remainingBullets, bullet)
-		}
-	}
-	g.bullets = remainingBullets
-}
-
-func (g *Game) checkPlayerCollisionsAndAffects() {
-	// Check for headstone collisions
-	for _, entitiy := range *g.entities {
-		if e, ok := entitiy.(ecs.Overlapper); ok {
-			// Define the player's bounding rectangle
-			playerRect := image.Rect(
-				int(g.player.x)+5, int(g.player.y)+5,
-				int(g.player.x)+20, int(g.player.y)+20,
-			)
-			// Check for collision
-			if e.Overlaps(playerRect, g) {
-				log.Printf("Player overlapped with object.")
-			}
-		}
-		// Append headstone to newHeadstones
-	}
-}
-
 func (g *Game) Update() error {
 	if g.exit {
 		return fmt.Errorf("exit")
@@ -890,7 +780,7 @@ func (g *Game) Update() error {
 	g.checkEnemyBulletCollisions()
 
 	// Check for enemy collisions with the player
-	g.checkPlayerCollisionsAndAffects()
+	g.checkPlayerCollisions()
 
 	// Check if all enemies are defeated
 	totalEnemies := 0
@@ -1080,63 +970,6 @@ func (g *Game) addDebugLog(log string) {
 		g.debugLogs = g.debugLogs[1:]
 	}
 	g.debugLogs = append(g.debugLogs, log)
-}
-
-type Sprite struct {
-	locX, locY       int
-	spriteX, spriteY int
-	size             int
-}
-
-type HeadStone struct {
-	Sprite
-	deathTime          time.Time
-	collidedWithPlayer bool
-}
-
-var _ ecs.Drawer = &HeadStone{}
-var _ ecs.Overlapper = &HeadStone{}
-
-func (hs *Sprite) Draw(screen *ebiten.Image, game ecs.Game) {
-	g := game.(*Game)
-
-	img := g.sprites.SubImage(image.Rect(hs.spriteX*hs.size, hs.spriteY*hs.size, (hs.spriteX*hs.size)+hs.size, (hs.spriteY*hs.size)+hs.size))
-	op := &ebiten.DrawImageOptions{}
-	op.GeoM.Translate(float64(hs.locX), float64(hs.locY))
-	screen.DrawImage(img.(*ebiten.Image), op)
-}
-
-func (hs *Sprite) Remove() bool {
-	return false
-}
-
-func (hs *HeadStone) Remove() bool {
-	if hs.collidedWithPlayer || time.Since(hs.deathTime) >= 5*time.Second {
-		log.Printf("Player headstone removal. Collision: %t", hs.collidedWithPlayer)
-		return true
-	}
-	return false
-}
-
-func (hs *HeadStone) Overlaps(r image.Rectangle, game ecs.Game) bool {
-	g := game.(*Game)
-	if hs.collidedWithPlayer {
-		log.Printf("Headstone already collided: %t", hs.collidedWithPlayer)
-		return true
-	}
-
-	// Define the headstone's bounding rectangle
-	headstoneRect := image.Rect(
-		hs.locX, hs.locY,
-		hs.locX+hs.size, hs.locY+hs.size,
-	)
-	hs.collidedWithPlayer = headstoneRect.Overlaps(r)
-	if hs.collidedWithPlayer {
-		g.headstonesCollected += 1 // Increment headstones collected
-		log.Printf("Headstone collided: %t adding point", hs.collidedWithPlayer)
-		log.Printf("Headstones collected: %d", g.headstonesCollected)
-	}
-	return hs.collidedWithPlayer
 }
 
 func (g *Game) AddHeadStone(x, y int) {
