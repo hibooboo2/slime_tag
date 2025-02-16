@@ -11,34 +11,34 @@ import (
 )
 
 type Game struct {
-	sprites           *ebiten.Image
-	entities          *ecs.Entities
-	menuOptions       []string
-	resolutionOptions []string
-	selected          int
-	inMainMenu        bool
-	keys              *Keys
-	exit              bool
-	player            *Player
-	debugLogs         []string
-	lastLogTime       time.Time
-	settings          bool
-	bullets           *ecs.Entities
-	frameCount        int // Add a frame counter
-	gamepads          []ebiten.GamepadID
-	enemiesKilled     int           // Add a field to track the number of enemies killed
-	gameOver          bool          // Add a field to track if the game is over
-	lastEnemySpawn    time.Time     // Track when we last spawned an enemy
-	spawnInterval     time.Duration // Current interval between enemy spawns
-	scaleFactor       float32       // Add this line to define scaleFactor
-	lastPowerUpSpawn  time.Time     // Add this line to track the last power-up spawn time
-	floatingTexts     []*FloatingText
-	settingsOptions   []string
-	settingsSelected  int
-	debugMode         bool
-	showResolutions   bool // Whether to show resolution popup
-	resolutionIdx     int  // Currently selected resolution
-
+	sprites             *ebiten.Image
+	entities            *ecs.Entities
+	menuOptions         []string
+	resolutionOptions   []string
+	selected            int
+	inMainMenu          bool
+	keys                *Keys
+	exit                bool
+	player              *Player
+	debugLogs           []string
+	lastLogTime         time.Time
+	settings            bool
+	bullets             *ecs.Entities
+	frameCount          int // Add a frame counter
+	gamepads            []ebiten.GamepadID
+	enemiesKilled       int           // Add a field to track the number of enemies killed
+	gameOver            bool          // Add a field to track if the game is over
+	lastEnemySpawn      time.Time     // Track when we last spawned an enemy
+	spawnInterval       time.Duration // Current interval between enemy spawns
+	scaleFactor         float32       // Add this line to define scaleFactor
+	lastPowerUpSpawn    time.Time     // Add this line to track the last power-up spawn time
+	floatingTexts       []*FloatingText
+	settingsOptions     []string
+	settingsSelected    int
+	debugMode           bool
+	showResolutions     bool // Whether to show resolution popup
+	resolutionIdx       int  // Currently selected resolution
+	paused              bool
 	headstonesCollected int // Add this line to track collected headstones
 }
 

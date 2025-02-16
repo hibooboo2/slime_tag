@@ -515,6 +515,7 @@ func (g *Game) handleKeys() {
 				switch g.menuOptions[g.selected] {
 				case "Start Game":
 					g.inMainMenu = false
+					g.paused = false
 					if g.gameOver {
 						g.resetGame()
 					}
@@ -523,11 +524,13 @@ func (g *Game) handleKeys() {
 				case "Settings":
 					g.inMainMenu = false
 					g.settings = true
+					g.paused = true
 				}
 
 			case ebiten.KeyEscape:
 				g.settings = false
 				g.inMainMenu = true
+				g.paused = true
 			case ebiten.KeyR:
 				if g.gameOver {
 					g.resetGame() // Restart the game if it's over
@@ -626,10 +629,10 @@ func (g *Game) Update() error {
 	isConnected := g.handleGamepadInput()
 
 	if g.inMainMenu {
-
+		g.paused = true
 	} else if !isConnected {
-		if g.gameOver {
-			return nil // Stop updating the game if it's over
+		if g.gameOver || g.paused {
+			return nil // Stop updating the game if it's over or paused is "true"
 		}
 		g.player.running = ebiten.IsKeyPressed(ebiten.KeyShift)
 
@@ -679,7 +682,9 @@ func (g *Game) Update() error {
 			g.player.attacking = false
 		}
 	}
-
+	if g.paused {
+		return nil
+	}
 	if g.player.x <= 0 {
 		g.player.x = float64(screenWidth) // Wrap to the right edge
 	} else if g.player.x >= float64(screenWidth) {
@@ -1114,6 +1119,7 @@ func (g *Game) resetGame() {
 	g.enemiesKilled = 0
 	g.gameOver = false
 	g.entities = &ecs.Entities{}
+	g.paused = false // Set paused to false when the game resets
 
 	for i := range 20 {
 		// Generate random positions for the enemies
@@ -1196,7 +1202,7 @@ func main() {
 		bullets:          &ecs.Entities{},
 		selected:         0,
 		settingsSelected: 0,
-		inMainMenu:       false,
+		inMainMenu:       true,
 		keys:             NewKeys(),
 		player:           p,
 		debugLogs:        []string{},
@@ -1204,6 +1210,7 @@ func main() {
 		scaleFactor:      1.0,
 		debugMode:        settings.DebugMode,
 		sprites:          sprites,
+		paused:           true,
 	}
 
 	if game.debugMode {
