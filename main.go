@@ -217,8 +217,81 @@ type Enemy struct {
 	speed               float64
 	dx, dy              float64
 	movementAngle       float32
-	done                chan bool
 	attacking           time.Time
+	shouldRemove        bool
+}
+
+var _ ecs.Overlapper = &Enemy{}
+var _ ecs.Drawer = &Enemy{}
+
+func (e *Enemy) getRect() image.Rectangle {
+	return image.Rect(
+		int(e.x)+e.sprites.idle.frameWidth/2-6, int(e.y)+e.sprites.idle.frameHeight/2-6,
+		int(e.x)+e.sprites.idle.frameWidth/2+6, int(e.y)+e.sprites.idle.frameHeight/2+6,
+	)
+}
+
+func (e *Enemy) Overlaps(r image.Rectangle, game ecs.Game) bool {
+	g := game.(*Game)
+	if !(g.frameCount%10 == 0) {
+		return false
+	}
+
+	if e.intention == Attack {
+		// Check for collision
+		if r.Overlaps(e.getRect()) {
+			// Damage the player
+			g.player.hpBar.AddHP(-10)
+
+			// Add floating text for damage
+			g.AddFloatingText("-10 HP", g.player.x, g.player.y, color.RGBA{255, 0, 0, 255}) // Red text for damage
+		}
+	}
+
+	return r.Overlaps(e.getRect())
+}
+
+func (e *Enemy) Draw(screen *ebiten.Image, game ecs.Game) {
+	g := game.(*Game)
+	op := &ebiten.DrawImageOptions{}
+	op.GeoM.Translate(e.x, e.y)
+
+	// Draw the enemy's HP bar above the enemy
+	drawHPBar(screen, e.x, e.y-10, e.hpBar, color.RGBA{255, 0, 0, 255})
+
+	// Use SubImage to get the desired part of the sprite
+	var sprite *AnimatedSprite
+	switch {
+	case e.hpBar.currentHP <= 0:
+		sprite = e.sprites.death
+	case e.hpBar.currentHP <= 50:
+		sprite = e.sprites.hurt
+	default:
+		switch e.intention {
+		case Idle:
+			sprite = e.sprites.idle
+		case Chase:
+			sprite = e.sprites.run
+		case Attack:
+			sprite = e.sprites.attack
+		}
+	}
+
+	isDone, subImage := sprite.GetCurrentSprite(g.frameCount, e.movementAngle)
+	if e.hpBar.currentHP <= 0 && isDone {
+		g.AddHeadStone(int(e.x), int(e.y))
+		e.shouldRemove = true
+	}
+
+	screen.DrawImage(subImage, op)
+
+	if g.debugMode {
+		drawRect(e.getRect(), screen)
+	}
+}
+
+func (e *Enemy) Remove() bool {
+	return e.shouldRemove
 }
 
 var enemyTypes = []string{
@@ -233,7 +306,6 @@ func NewEnemy(slimeName string, startX, startY float64) *Enemy {
 		sprites:   NewSpritePack(slimeName),
 		intention: Idle,
 		hpBar:     NewHPBar(100),
-		done:      make(chan bool),
 	}
 	return e
 }
@@ -243,7 +315,7 @@ func (e *Enemy) RandomMovement(playerX, playerY float64) {
 		return
 	}
 	// Randomly change direction
-	if time.Since(e.lastIntentionChange) > time.Duration(rand.Intn(3000)+1000)*time.Millisecond {
+	if time.Since(e.lastIntentionChange) > time.Duration(rand.Intn(1400)+600)*time.Millisecond {
 		switch {
 		case rand.Intn(100) > 40:
 			e.intention = Attack
@@ -296,14 +368,17 @@ type PowerUp struct {
 	collided  bool
 }
 
-func (pu *PowerUp) Overlaps(r image.Rectangle, game ecs.Game) bool {
-	g := game.(*Game)
-	powerupRect := image.Rect(
+func (pu *PowerUp) getRect() image.Rectangle {
+	return image.Rect(
 		int(pu.x)-20, int(pu.y)-20,
 		int(pu.x)+20, int(pu.y)+20,
 	)
+}
 
-	pu.collided = powerupRect.Overlaps(r)
+func (pu *PowerUp) Overlaps(r image.Rectangle, game ecs.Game) bool {
+	g := game.(*Game)
+
+	pu.collided = pu.getRect().Overlaps(r)
 
 	if !pu.collided {
 		return false
@@ -328,6 +403,7 @@ func (pu *PowerUp) Draw(screen *ebiten.Image, game ecs.Game) {
 	op.GeoM.Translate(pu.x, pu.y)
 	_, img := pu.icon.GetCurrentSprite(g.frameCount, 0)
 	screen.DrawImage(img, op)
+
 }
 
 func (pu *PowerUp) Remove() bool {
@@ -399,7 +475,6 @@ type Game struct {
 	bullets           []*Bullet
 	frameCount        int // Add a frame counter
 	gamepads          []ebiten.GamepadID
-	enemies           []*Enemy      // Add a slice to hold enemies
 	enemiesKilled     int           // Add a field to track the number of enemies killed
 	gameOver          bool          // Add a field to track if the game is over
 	lastEnemySpawn    time.Time     // Track when we last spawned an enemy
@@ -640,7 +715,11 @@ func (g *Game) checkEnemyBulletCollisions() {
 	var remainingBullets []*Bullet
 	for _, bullet := range g.bullets {
 		collided := false
-		for _, enemy := range g.enemies {
+		for _, e := range *g.entities {
+			enemy, ok := e.(*Enemy)
+			if !ok {
+				continue
+			}
 			if enemy.hpBar.currentHP < 1 {
 				continue
 			}
@@ -693,40 +772,12 @@ func (g *Game) checkEnemyBulletCollisions() {
 }
 
 func (g *Game) checkPlayerCollisionsAndAffects() {
-	for _, enemy := range g.enemies {
-		if enemy.hpBar.currentHP <= 1 {
-			continue
-		}
-		if enemy.intention == Attack {
-			// Define the player's bounding rectangle
-			playerRect := image.Rect(
-				int(g.player.x)-16, int(g.player.y)-16,
-				int(g.player.x)+16, int(g.player.y)+16,
-			)
-
-			// Define the enemy's bounding rectangle
-			enemyRect := image.Rect(
-				int(enemy.x)+enemy.sprites.idle.frameWidth-16,
-				int(enemy.y)+enemy.sprites.idle.frameHeight-16,
-				int(enemy.x)+16, int(enemy.y)+16,
-			)
-
-			// Check for collision
-			if playerRect.Overlaps(enemyRect) {
-				// Damage the player
-				g.player.hpBar.AddHP(-10)
-
-				// Add floating text for damage
-				g.AddFloatingText("-10 HP", g.player.x, g.player.y, color.RGBA{255, 0, 0, 255}) // Red text for damage
-			}
-		}
-	}
 	// Check for headstone collisions
 	for _, entitiy := range *g.entities {
 		if e, ok := entitiy.(ecs.Overlapper); ok {
 			// Define the player's bounding rectangle
 			playerRect := image.Rect(
-				int(g.player.x)-20, int(g.player.y)-20,
+				int(g.player.x)+5, int(g.player.y)+5,
 				int(g.player.x)+20, int(g.player.y)+20,
 			)
 			// Check for collision
@@ -825,32 +876,36 @@ func (g *Game) Update() error {
 	}
 	g.bullets = activeBullets
 
-	for _, enemy := range g.enemies {
-		enemy.RandomMovement(g.player.x, g.player.y)
-	}
-
-	// Update HP bar visibility
 	g.player.hpBar.updateOpacity()
-	for _, enemy := range g.enemies {
+	for _, e := range *g.entities {
+		enemy, ok := e.(*Enemy)
+		if !ok {
+			continue
+		}
+		enemy.RandomMovement(g.player.x, g.player.y)
 		enemy.hpBar.updateOpacity()
 	}
 
 	// Check for bullet collisions with enemies
 	g.checkEnemyBulletCollisions()
 
-	if g.frameCount%5 == 0 {
-		// Check for enemy collisions with the player
-		g.checkPlayerCollisionsAndAffects()
+	// Check for enemy collisions with the player
+	g.checkPlayerCollisionsAndAffects()
 
-		// Check if all enemies are defeated
-		if len(g.enemies) == 0 {
-			// Spawn 20 new enemies
-			for i := range 20 {
-				x := rand.Intn(screenWidth / 2)
-				y := rand.Intn(screenHeight / 2)
-				g.enemies = append(g.enemies, NewEnemy(enemyTypes[(i%len(enemyTypes))], float64(x), float64(y)))
-
-			}
+	// Check if all enemies are defeated
+	totalEnemies := 0
+	for _, enemy := range *g.entities {
+		_, ok := enemy.(*Enemy)
+		if ok {
+			totalEnemies++
+		}
+	}
+	if totalEnemies == 0 {
+		// Spawn 20 new enemies
+		for i := range 20 {
+			x := rand.Intn(screenWidth / 2)
+			y := rand.Intn(screenHeight / 2)
+			g.entities.Add(NewEnemy(enemyTypes[(i%len(enemyTypes))], float64(x), float64(y)))
 		}
 	}
 	// Increment the frame counter
@@ -871,8 +926,8 @@ func (g *Game) Update() error {
 	// Check if it's time to spawn a new enemy
 	if time.Since(g.lastEnemySpawn) >= g.spawnInterval {
 		x := rand.Intn(screenWidth / 2)
-		y := rand.Intn(1080 / 2)
-		g.enemies = append(g.enemies, NewEnemy(enemyTypes[rand.Intn(len(enemyTypes))], float64(x), float64(y)))
+		y := rand.Intn(screenHeight / 2)
+		g.entities.Add(NewEnemy(enemyTypes[rand.Intn(len(enemyTypes))], float64(x), float64(y)))
 		g.lastEnemySpawn = time.Now()
 	}
 
@@ -984,53 +1039,21 @@ func (g *Game) drawGameView(screen *ebiten.Image) {
 		sprite = g.player.spritePack.run
 	}
 
+	playerRect := image.Rect(
+		int(g.player.x)+g.player.spritePack.idle.frameWidth/2-10, int(g.player.y)+g.player.spritePack.idle.frameHeight/2-10,
+		int(g.player.x)+g.player.spritePack.idle.frameWidth/2+10, int(g.player.y)+g.player.spritePack.idle.frameHeight/2+10,
+	)
+
+	if g.debugMode {
+		drawRect(playerRect, screen)
+	}
+
 	isDone, currentPlayerSprite := sprite.GetCurrentSprite(g.frameCount, g.player.movementAngle)
 	defer screen.DrawImage(currentPlayerSprite, op)
 	if g.player.hpBar.currentHP <= 0 && isDone {
 		g.inMainMenu = true
 		g.player.hpBar.currentHP = 100
 	}
-
-	// Draw enemies
-	newEnemies := []*Enemy{}
-	for _, enemy := range g.enemies {
-		op := &ebiten.DrawImageOptions{}
-		op.GeoM.Translate(enemy.x, enemy.y)
-
-		// Draw the enemy's HP bar above the enemy
-		drawHPBar(screen, enemy.x, enemy.y-10, enemy.hpBar, color.RGBA{255, 0, 0, 255})
-
-		// Use SubImage to get the desired part of the sprite
-		var sprite *AnimatedSprite
-		switch {
-		case enemy.hpBar.currentHP <= 0:
-			sprite = enemy.sprites.death
-		case enemy.hpBar.currentHP <= 50:
-			sprite = enemy.sprites.hurt
-		default:
-			switch enemy.intention {
-			case Idle:
-				sprite = enemy.sprites.idle
-			case Chase:
-				sprite = enemy.sprites.run
-			case Attack:
-				sprite = enemy.sprites.attack
-			}
-		}
-
-		//XXX Death animation is not working
-		isDone, subImage := sprite.GetCurrentSprite(g.frameCount, enemy.movementAngle)
-		if !(enemy.hpBar.currentHP <= 0 && isDone) {
-			newEnemies = append(newEnemies, enemy)
-		} else {
-			g.AddHeadStone(int(enemy.x), int(enemy.y))
-		}
-
-		// Draw the sub-image
-		screen.DrawImage(subImage, op)
-	}
-	g.enemies = newEnemies
-
 	// Draw bullets
 	for _, bullet := range g.bullets {
 		vector.DrawFilledCircle(screen, bullet.x, bullet.y, 3, color.RGBA{255, 255, 255, 255}, true) // White circle for bullets
@@ -1255,13 +1278,22 @@ func (g *Game) Draw(screen *ebiten.Image) {
 	// Draw the game background if needed
 	// screen.DrawImage(backgroundImage, nil) // Uncomment if you have a separate game background
 
+	totalEnemiesAlive := 0
+	for _, e := range *g.entities {
+		_, ok := e.(*Enemy)
+		if !ok {
+			continue
+		}
+		totalEnemiesAlive++
+	}
+
 	// Create a status box object
 	statusBox := &StatusBox{
 		width:      float32(screenWidth) * 0.2,
 		height:     float32(screenHeight) * 0.15,
 		x:          float32(screenWidth) - (float32(screenWidth)*0.2 - 20),
 		y:          20,
-		enemies:    len(g.enemies),
+		enemies:    totalEnemiesAlive,
 		killed:     g.enemiesKilled,
 		headstones: g.headstonesCollected,
 		scale:      g.scaleFactor,
@@ -1308,16 +1340,13 @@ func (g *Game) resetGame() {
 	g.player.hpBar.currentHP = 100
 	g.enemiesKilled = 0
 	g.gameOver = false
-	for _, enemy := range g.enemies {
-		close(enemy.done)
-	}
-	g.enemies = []*Enemy{}
+	g.entities = &ecs.Entities{}
 
 	for i := range 20 {
 		// Generate random positions for the enemies
 		x := rand.Intn(screenWidth / 2)  // Assuming the screen width is 1920
 		y := rand.Intn(screenHeight / 2) // Assuming the screen height is 1080
-		g.enemies = append(g.enemies, NewEnemy(enemyTypes[(i%len(enemyTypes))], float64(x), float64(y)))
+		g.entities.Add(NewEnemy(enemyTypes[(i%len(enemyTypes))], float64(x), float64(y)))
 	}
 	g.spawnInterval = 30 * time.Second
 	g.lastEnemySpawn = time.Now()
@@ -1415,7 +1444,7 @@ func main() {
 		// Generate random positions for the enemies
 		x := rand.Intn(screenWidth / 2)  // Assuming the screen width is 1920
 		y := rand.Intn(screenHeight / 2) // Assuming the screen height is 1080
-		game.enemies = append(game.enemies, NewEnemy(enemyTypes[(i%len(enemyTypes))], float64(x), float64(y)))
+		game.entities.Add(NewEnemy(enemyTypes[(i%len(enemyTypes))], float64(x), float64(y)))
 	}
 
 	go game.handleKeys()
@@ -1488,4 +1517,12 @@ func loadImage(path string) (*ebiten.Image, error) {
 		return nil, err
 	}
 	return img, nil
+}
+
+func drawRect(r image.Rectangle, screen *ebiten.Image) {
+	// Draw the player's bounding box
+	vector.StrokeRect(screen,
+		float32(r.Min.X), float32(r.Min.Y),
+		float32(r.Dx()), float32(r.Dy()),
+		1, color.RGBA{125, 21, 92, 255}, false)
 }
