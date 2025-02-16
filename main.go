@@ -192,14 +192,6 @@ func (sprite *AnimatedSprite) GetCurrentSprite(frameCount int, movementAngle flo
 	return isFinished, sprite.image.SubImage(image.Rect(x, direction*sprite.frameHeight, x+sprite.frameWidth, direction*sprite.frameHeight+sprite.frameHeight)).(*ebiten.Image)
 }
 
-type Bullet struct {
-	x, y         float32
-	angle        float32
-	speed        float32
-	creationTime time.Time // Add creationTime to track bullet age
-	hp           int
-}
-
 type Intention int
 
 const (
@@ -619,7 +611,7 @@ func (g *Game) handleGamepadInput() bool {
 					speed:        5,
 					creationTime: time.Now(), // Initialize creationTime
 				}
-				g.bullets = append(g.bullets, bullet)
+				g.bullets.Add(bullet)
 			}
 		}
 	}
@@ -680,8 +672,9 @@ func (g *Game) Update() error {
 				angle:        calculateAngleToMouse(g.player.x, g.player.y),
 				speed:        10,
 				creationTime: time.Now(),
+				radius:       3,
 			}
-			g.bullets = append(g.bullets, bullet)
+			g.bullets.Add(bullet)
 		} else {
 			g.player.attacking = false
 		}
@@ -701,17 +694,18 @@ func (g *Game) Update() error {
 
 	// Update bullet positions and remove old bullets
 	currentTime := time.Now()
-	var activeBullets []*Bullet
-	for _, bullet := range g.bullets {
+	for _, bullet := range *g.bullets {
+		bullet, ok := bullet.(*Bullet)
+		if !ok {
+			continue
+		}
 		// Check if the bullet is older than 5 seconds
 		if currentTime.Sub(bullet.creationTime) < 5*time.Second {
 			rad := bullet.angle * (math.Pi / 180)
 			bullet.x += bullet.speed * float32(math.Cos(float64(rad)))
 			bullet.y += bullet.speed * float32(math.Sin(float64(rad)))
-			activeBullets = append(activeBullets, bullet)
 		}
 	}
-	g.bullets = activeBullets
 
 	g.player.hpBar.updateOpacity()
 	for _, e := range *g.entities {
@@ -723,11 +717,13 @@ func (g *Game) Update() error {
 		enemy.hpBar.updateOpacity()
 	}
 
-	// Check for bullet collisions with enemies
-	g.checkEnemyBulletCollisions()
+	if g.frameCount%5 == 0 {
+		// Check for bullet collisions with enemies
+		g.checkEnemyBulletCollisions()
 
-	// Check for enemy collisions with the player
-	g.checkPlayerCollisions()
+		// Check for enemy collisions with the player
+		g.checkPlayerCollisions()
+	}
 
 	// Check if all enemies are defeated
 	totalEnemies := 0
@@ -891,10 +887,6 @@ func (g *Game) drawGameView(screen *ebiten.Image) {
 		g.inMainMenu = true
 		g.player.hpBar.currentHP = 100
 	}
-	// Draw bullets
-	for _, bullet := range g.bullets {
-		vector.DrawFilledCircle(screen, bullet.x, bullet.y, 3, color.RGBA{255, 255, 255, 255}, true) // White circle for bullets
-	}
 
 	// Draw floating texts
 	for _, ft := range g.floatingTexts {
@@ -902,6 +894,7 @@ func (g *Game) drawGameView(screen *ebiten.Image) {
 	}
 
 	g.entities.Draw(screen, g)
+	g.bullets.Draw(screen, g)
 }
 
 func (g *Game) setDebugLogFirstSlot(log string) {
@@ -1200,6 +1193,7 @@ func main() {
 			"Back",
 		},
 		entities:         &ecs.Entities{},
+		bullets:          &ecs.Entities{},
 		selected:         0,
 		settingsSelected: 0,
 		inMainMenu:       false,

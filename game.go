@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"image"
 	"image/color"
 	"log"
@@ -24,7 +23,7 @@ type Game struct {
 	debugLogs         []string
 	lastLogTime       time.Time
 	settings          bool
-	bullets           []*Bullet
+	bullets           *ecs.Entities
 	frameCount        int // Add a frame counter
 	gamepads          []ebiten.GamepadID
 	enemiesKilled     int           // Add a field to track the number of enemies killed
@@ -44,11 +43,14 @@ type Game struct {
 }
 
 func (g *Game) checkEnemyBulletCollisions() {
-	var remainingBullets []*Bullet
-	for _, bullet := range g.bullets {
-		collided := false
-		for _, e := range *g.entities {
-			enemy, ok := e.(*Enemy)
+	//XXX FIX THIS ITS BUGGED
+	for b := range *g.bullets {
+		bullet, ok := (*g.bullets)[b].(*Bullet)
+		if !ok || bullet.collided {
+			continue
+		}
+		for e := range *g.entities {
+			enemy, ok := (*g.entities)[e].(*Enemy)
 			if !ok {
 				continue
 			}
@@ -57,21 +59,12 @@ func (g *Game) checkEnemyBulletCollisions() {
 			}
 			// Define the enemy's bounding rectangle
 
-			// EMEMY HIT BOX IS 32px *32px
-			enemyRect := image.Rect(
-				int(enemy.x)+16, int(enemy.y)+16,
-				int(enemy.x)+enemy.sprites.idle.frameWidth-16,
-				int(enemy.y)+enemy.sprites.idle.frameHeight-16,
-			)
-
+			enemyRect := enemy.getRect()
 			// Check if the bullet is within the enemy's rectangle
 			// The enemy is hit by bullets here wihch are a radius of 3px
-			if enemyRect.Min.X <= int(bullet.x)+3 && int(bullet.x)-3 <= enemyRect.Max.X &&
-				enemyRect.Min.Y <= int(bullet.y)+3 && int(bullet.y)-3 <= enemyRect.Max.Y {
+			if bullet.Overlaps(enemyRect, g) {
 				// Collision detected
-				enemy.hpBar.currentHP -= 20
-				enemy.hpBar.lastDamageTime = time.Now()
-				enemy.hpBar.visible = true
+				enemy.hpBar.AddHP(-20)
 				if enemy.hpBar.currentHP <= 0 {
 					g.enemiesKilled++                                                              // Increment the enemies killed count
 					g.AddFloatingText("+5 HP", g.player.x, g.player.y, color.RGBA{0, 255, 0, 255}) // Add healing text
@@ -83,24 +76,16 @@ func (g *Game) checkEnemyBulletCollisions() {
 						g.spawnInterval = 100 * time.Millisecond // Ensure a minimum spawn interval
 					}
 
-					// Log the current spawn interval to the debug log
-					g.addDebugLog(fmt.Sprintf("Current Spawn Interval: %v", g.spawnInterval))
-
 					// Spawn a power-up every 5 enemies killed
 					if g.enemiesKilled%5 == 0 {
 						g.entities.Add(NewRandomPowerUp())
 					}
 				}
-				collided = true
 				break
 			}
 
 		}
-		if !collided {
-			remainingBullets = append(remainingBullets, bullet)
-		}
 	}
-	g.bullets = remainingBullets
 }
 
 func (g *Game) checkPlayerCollisions() {
