@@ -37,10 +37,12 @@ func (e *Entities) Add(entity any) {
 	for i := range *e {
 		if (*e)[i] == nil {
 			(*e)[i] = entity
+			log.Println("Added entity: ", i, "to existing spot.")
 			return
 		}
 	}
 	*e = append(*e, entity)
+	log.Println("Added entity: ", len(*e)-1, "to new spot.")
 }
 
 func (e *Entities) Remove(entity any) bool {

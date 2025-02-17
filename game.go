@@ -43,12 +43,19 @@ type Game struct {
 }
 
 func (g *Game) checkEnemyBulletCollisions() {
-	for b := len(*g.bullets) - 1; b >= 0; b-- {
+	//XXX FIX THIS ITS BUGGED
+	for b := range *g.bullets {
+		if (*g.bullets)[b] == nil {
+			continue
+		}
 		bullet, ok := (*g.bullets)[b].(*Bullet)
 		if !ok || bullet.collided {
 			continue
 		}
-		for e := len(*g.entities) - 1; e >= 0; e-- {
+		for e := range *g.entities {
+			if (*g.entities)[e] == nil {
+				continue
+			}
 			enemy, ok := (*g.entities)[e].(*Enemy)
 			if !ok {
 				continue

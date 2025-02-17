@@ -3,6 +3,7 @@ package main
 import (
 	"image"
 	"image/color"
+	"log"
 	"time"
 
 	"github.com/hajimehoshi/ebiten/v2"
@@ -34,6 +35,7 @@ func (b *Bullet) Draw(screen *ebiten.Image, game ecs.Game) {
 
 func (b *Bullet) Overlaps(r image.Rectangle, game ecs.Game) bool {
 	if b.collided {
+		log.Println("Bullet already collided: ", b.x, b.y)
 		return false
 	}
 	// g := game.(*Game)

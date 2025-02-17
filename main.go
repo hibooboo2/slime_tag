@@ -217,9 +217,10 @@ var _ ecs.Overlapper = &Enemy{}
 var _ ecs.Drawer = &Enemy{}
 
 func (e *Enemy) getRect() image.Rectangle {
+	hitBoxSize := 20
 	return image.Rect(
-		int(e.x)+e.sprites.idle.frameWidth/2-6, int(e.y)+e.sprites.idle.frameHeight/2-6,
-		int(e.x)+e.sprites.idle.frameWidth/2+6, int(e.y)+e.sprites.idle.frameHeight/2+6,
+		int(e.x)+e.sprites.idle.frameWidth/2-hitBoxSize/2, int(e.y)+e.sprites.idle.frameHeight/2-hitBoxSize/2,
+		int(e.x)+e.sprites.idle.frameWidth/2+hitBoxSize/2, int(e.y)+e.sprites.idle.frameHeight/2+hitBoxSize/2,
 	)
 }
 
@@ -612,6 +613,7 @@ func (g *Game) handleGamepadInput() bool {
 					y:            float32(g.player.y) + 32, // Convert y to float32
 					angle:        g.player.movementAngle,
 					speed:        5,
+					radius:       4,
 					creationTime: time.Now(), // Initialize creationTime
 				}
 				g.bullets.Add(bullet)
@@ -675,9 +677,11 @@ func (g *Game) Update() error {
 				angle:        calculateAngleToMouse(g.player.x, g.player.y),
 				speed:        10,
 				creationTime: time.Now(),
-				radius:       3,
+				radius:       4,
 			}
 			g.bullets.Add(bullet) // Add bullet to the bullets entity list
+		} else {
+			g.player.attacking = false
 		}
 	}
 	if g.paused {
@@ -715,7 +719,7 @@ func (g *Game) Update() error {
 		enemy.hpBar.updateOpacity()
 	}
 
-	if g.frameCount%5 == 0 {
+	if g.frameCount%3 == 0 {
 		// Check for bullet collisions with enemies
 		g.checkEnemyBulletCollisions()
 
