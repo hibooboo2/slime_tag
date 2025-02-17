@@ -1,6 +1,10 @@
 package wfc
 
-import "golang.org/x/exp/rand"
+import (
+	"slices"
+
+	"golang.org/x/exp/rand"
+)
 
 const (
 	Width  = 80
@@ -8,7 +12,8 @@ const (
 )
 
 type Grid struct {
-	Data [Height][Width]*Cell
+	Data        [Height][Width]*Cell
+	Constraints map[string]Constraint
 }
 
 type Cell struct {
@@ -22,16 +27,14 @@ type Constraint struct {
 	AllowableNeighbors [3][3][]string
 }
 
-var (
-	constraints = map[string]Constraint{}
-)
-
-func NewGrid() *Grid {
+func NewGrid(constraints map[string]Constraint) *Grid {
 	possibleValues := []string{}
 	for c := range constraints {
 		possibleValues = append(possibleValues, c)
 	}
-	g := &Grid{}
+	g := &Grid{
+		Constraints: constraints,
+	}
 	for y := range g.Data {
 		for x := range g.Data[y] {
 			myPossibleValues := make([]string, len(possibleValues))
@@ -49,14 +52,14 @@ type Loc struct {
 	Y int
 }
 
-func (g *Grid) CollapseLowestEntropyCell() {
+func (g *Grid) CollapseCells() {
 	for {
 		lowestEntropy := -1
 		lowestEntropyLoc := []Loc{}
 		for y := range g.Data {
 			for x := range g.Data[y] {
 				cell := g.Data[y][x]
-				if cell.Collapsed {
+				if cell.Collapsed || len(cell.AllowedValues) == 0 {
 					continue
 				}
 				if lowestEntropy == -1 || len(cell.AllowedValues) < lowestEntropy {
@@ -75,30 +78,96 @@ func (g *Grid) CollapseLowestEntropyCell() {
 				}
 			}
 		}
+		if lowestEntropy == -1 {
+			break
+		}
 		loc := lowestEntropyLoc[rand.Intn(len(lowestEntropyLoc))]
-		g.CollapseCell(loc.X, loc.Y)
+		g.CollapseCell(loc)
+		g.PropagateChanges(loc)
 	}
 }
 
-func (g *Grid) CollapseCell(x, y int) {
-	allowedValues := g.Data[y][x].AllowedValues
+func (g *Grid) CollapseCell(loc Loc) {
+	allowedValues := g.Data[loc.Y][loc.X].AllowedValues
 	newValue := allowedValues[rand.Intn(len(allowedValues))]
-	g.Data[y][x].Value = newValue
-	g.Data[y][x].Collapsed = true
+	g.Data[loc.Y][loc.X].Value = newValue
+	g.Data[loc.Y][loc.X].Collapsed = true
 }
 
 func (g *Grid) PropagateChanges(lastCellCollapsed Loc) {
 	cellsToPropagate := []Loc{lastCellCollapsed}
-	for {
+	for len(cellsToPropagate) > 0 {
+		newCellsToPropagate := []Loc{}
 		for _, cell := range cellsToPropagate {
-			constraint := constraints[g.Data[cell.Y][cell.X].Value]
-			for y := range constraint.AllowableNeighbors {
-				for x := range constraint.AllowableNeighbors[y] {
-					// Need to compare allowable neightbor values to allowed values of the cells
-					// that are neighbors of the last cell collapsed.
-					//Then add the neighbors to the last cell collapsed if any changed
-				}
+			constraint := g.Constraints[g.Data[cell.Y][cell.X].Value]
+			x, y := cell.X, cell.Y
+
+			// Propagate to neighbors
+			if g.PropagateCell(x, y, -1, -1, constraint) {
+				newCellsToPropagate = append(newCellsToPropagate, Loc{
+					X: x - 1,
+					Y: y - 1,
+				})
+			}
+			if g.PropagateCell(x, y, 0, -1, constraint) {
+				newCellsToPropagate = append(newCellsToPropagate, Loc{
+					X: x,
+					Y: y - 1,
+				})
+			}
+			if g.PropagateCell(x, y, 1, -1, constraint) {
+				newCellsToPropagate = append(newCellsToPropagate, Loc{
+					X: x + 1,
+					Y: y - 1,
+				})
+			}
+			if g.PropagateCell(x, y, -1, 0, constraint) {
+				newCellsToPropagate = append(newCellsToPropagate, Loc{
+					X: x - 1,
+					Y: y,
+				})
+			}
+			if g.PropagateCell(x, y, 1, 0, constraint) {
+				newCellsToPropagate = append(newCellsToPropagate, Loc{
+					X: x + 1,
+					Y: y,
+				})
+			}
+			if g.PropagateCell(x, y, -1, 1, constraint) {
+				newCellsToPropagate = append(newCellsToPropagate, Loc{
+					X: x - 1,
+					Y: y + 1,
+				})
+			}
+			if g.PropagateCell(x, y, 0, 1, constraint) {
+				newCellsToPropagate = append(newCellsToPropagate, Loc{
+					X: x,
+					Y: y + 1,
+				})
+			}
+			if g.PropagateCell(x, y, 1, 1, constraint) {
+				newCellsToPropagate = append(newCellsToPropagate, Loc{
+					X: x + 1,
+					Y: y + 1,
+				})
 			}
 		}
+		cellsToPropagate = newCellsToPropagate
 	}
+}
+
+func (g *Grid) PropagateCell(x, y int, xoff int, yoff int, constraint Constraint) bool {
+	didChange := false
+	if x+xoff >= 0 && y+yoff >= 0 && x+xoff < Width && y+yoff < Height {
+		newAllowedValues := []string{}
+		for _, val := range g.Data[y+yoff-1][x+xoff-1].AllowedValues {
+			if !slices.Contains(constraint.AllowableNeighbors[1+yoff][1+xoff], val) {
+				didChange = true
+				continue
+			}
+			newAllowedValues = append(newAllowedValues, val)
+		}
+		g.Data[y+yoff-1][x+xoff-1].AllowedValues = newAllowedValues
+	}
+	return didChange
 }
