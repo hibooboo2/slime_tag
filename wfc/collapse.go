@@ -1,15 +1,79 @@
 package wfc
 
 import (
+	"encoding/json"
+	"fmt"
+	"log"
+	"os"
 	"slices"
+	"strconv"
 
 	"golang.org/x/exp/rand"
 )
 
 const (
-	Width  = 80
-	Height = 40
+	Width  = 40
+	Height = 20
 )
+
+type ConstraintToSolveFor struct {
+	rules [Height][Width]struct {
+		x int
+		y int
+	}
+}
+
+func NewConstraintToSolveFor(filename string) map[string]*Constraint {
+	var cells []struct {
+		x  int
+		y  int
+		id string
+	}
+	data, err := os.ReadFile(filename)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	err = json.Unmarshal(data, &cells)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	c := ConstraintToSolveFor{}
+
+	constraints := make(map[string]*Constraint)
+	for _, cell := range cells {
+		id, err := strconv.Atoi(cell.id)
+		if err != nil {
+			continue
+		}
+		x := id / Width
+		y := id % Height
+
+		c.rules[y][x] = struct {
+			x int
+			y int
+		}{cell.x, cell.y}
+	}
+
+	for y := range c.rules {
+		for x := range c.rules[y] {
+			id := fmt.Sprintf("%d,%d", x, y)
+			constraint, ok := constraints[id]
+			if !ok {
+				constraint = &Constraint{
+					Value:              id,
+					AllowableNeighbors: [3][3][]string{},
+				}
+				constraints[id] = constraint
+			}
+			//XXX need to implement this. Use rules to create constraints.
+			// Add each neighbor as a poissble allowed for each usage of the id.
+		}
+	}
+
+	return constraints
+}
 
 type Grid struct {
 	Data        [Height][Width]*Cell
