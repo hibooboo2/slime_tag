@@ -108,6 +108,7 @@ type Player struct {
 	spritePack          *SpritePack
 	hpBar               *HPBar
 	headstonesCollected int // Add this line to track collected headstones
+	headstonePowerup    time.Time
 }
 
 var sprites = map[string]*ebiten.Image{}
@@ -682,10 +683,14 @@ func (g *Game) Update() error {
 				radius:       4,
 				hp:           20,
 			}
+			if time.Since(g.player.headstonePowerup) < 10*time.Second {
+				bullet.hp = 50
+			}
 			g.bullets.Add(bullet) // Add bullet to the bullets entity list
 		} else {
 			g.player.attacking = false
 		}
+
 	}
 	if g.paused {
 		return nil
@@ -1009,16 +1014,20 @@ func (box *StatusBox) Draw(screen *ebiten.Image, g *Game) {
 	// Scale text relative to box height to prevent overlap
 	textScale := (box.height / 162.0) * 0.6 // Scale text to 60% of the box height ratio
 
-	texts := []struct {
+	type statusRow struct {
 		label   string
 		value   string
 		yOffset float32
-	}{
+	}
+	texts := []statusRow{
 		{"Enemies:", fmt.Sprintf("%d", box.enemies), box.height * 0.25},
 		{"Kills:", fmt.Sprintf("%d", box.killed), box.height * 0.45},
 		{"Score:", fmt.Sprintf("%d", (box.killed*100)+(500*box.headstones)), box.height * 0.65},
 		{"FPS:", fmt.Sprintf("%.0f", ebiten.ActualFPS()), box.height * 0.85},
 		{"Headstones:", fmt.Sprintf("%d", g.player.headstonesCollected), box.height * 1.05},
+	}
+	if time.Since(g.player.headstonePowerup) < 10*time.Second {
+		texts = append(texts, statusRow{"Powerup Time Left:", fmt.Sprintf("%s", ((10 * time.Second) - time.Since(g.player.headstonePowerup)).Truncate(time.Second)), box.height * 1.25})
 	}
 
 	for _, txt := range texts {

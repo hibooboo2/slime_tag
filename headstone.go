@@ -42,6 +42,10 @@ func (hs *HeadStone) Overlaps(r image.Rectangle, game ecs.Game) bool {
 		g.player.headstonesCollected += 1 // Increment headstones collected
 		log.Printf("Headstone collided: %t adding point", hs.collidedWithPlayer)
 		log.Printf("Headstones collected: %d", g.player.headstonesCollected)
+		if g.player.headstonesCollected%10 == 0 {
+			g.player.headstonePowerup = time.Now()
+		}
 	}
+
 	return hs.collidedWithPlayer
 }
