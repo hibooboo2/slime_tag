@@ -695,26 +695,15 @@ func (g *Game) Update() error {
 		g.player.y = 0 // Wrap to the top edge
 	}
 
-	// Update bullet positions and remove old bullets
-	currentTime := time.Now()
 	for i := len(*g.bullets) - 1; i >= 0; i-- {
 		bullet, ok := (*g.bullets)[i].(*Bullet)
 		if !ok {
 			continue
 		}
-		// Check if the bullet is older than 5 seconds
-		if currentTime.Sub(bullet.creationTime) < 5*time.Second {
-			rad := bullet.angle * (math.Pi / 180)
-			bullet.x += bullet.speed * float32(math.Cos(float64(rad))) // Update bullet position based on speed and angle
-			bullet.y += bullet.speed * float32(math.Sin(float64(rad))) // Update bullet position based on speed and angle
-		} else {
-			// Remove bullet if it has existed for too long
-			g.bullets.Remove(bullet)
-		}
+		rad := bullet.angle * (math.Pi / 180)
+		bullet.x += bullet.speed * float32(math.Cos(float64(rad))) // Update bullet position based on speed and angle
+		bullet.y += bullet.speed * float32(math.Sin(float64(rad))) // Update bullet position based on speed and angle
 	}
-
-	// Check for bullet collisions with enemies
-	g.checkEnemyBulletCollisions()
 
 	g.player.hpBar.updateOpacity()
 	for _, e := range *g.entities {
