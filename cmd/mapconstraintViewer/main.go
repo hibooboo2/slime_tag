@@ -1,7 +1,9 @@
 package main
 
 import (
+	"fmt"
 	"image"
+	"io/fs"
 	"log"
 	"os"
 
@@ -9,18 +11,13 @@ import (
 	"github.com/hajimehoshi/ebiten/v2/ebitenutil"
 	"github.com/hibooboo2/slime_tag/assets"
 	"github.com/hibooboo2/slime_tag/keys"
+	"github.com/hibooboo2/slime_tag/wfc"
 )
 
 var spriteImage *ebiten.Image
 var screenWidth, screenHeight int
 
 func main() {
-	file, err := os.Open("./constraints.json")
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer file.Close()
-
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
 	monitor := ebiten.Monitor()
 	if monitor == nil {
@@ -41,6 +38,7 @@ func main() {
 
 	go viewer.HandleKeys()
 
+	var err error
 	spriteImage, _, err = ebitenutil.NewImageFromFileSystem(assets.Resources, "resources/slimes/ProjectUtumno_full.png") // Load the sprite image
 	if err != nil {
 		panic(err)
@@ -52,7 +50,8 @@ func main() {
 }
 
 type Viewer struct {
-	keys *keys.Keys
+	keys        *keys.Keys
+	constraints *wfc.ConstraintToSolveFor
 }
 
 func (v *Viewer) HandleKeys() {
@@ -68,6 +67,32 @@ func (v *Viewer) HandleKeys() {
 func (v *Viewer) Update() error {
 	v.keys.Update()
 
+	files := ebiten.DroppedFiles()
+	if files != nil {
+		err := fs.WalkDir(files, ".", func(path string, d fs.DirEntry, err error) error {
+			if err != nil {
+				log.Println("error walking directory", err)
+			}
+			log.Println("dropped file", path)
+			info, err := d.Info()
+			if err != nil {
+				return fmt.Errorf("error getting info: %v", err)
+			}
+			if info.IsDir() {
+				return nil
+			}
+			constraints, err := wfc.NewConstraintToSolveFor(files, path, 32)
+			if err != nil {
+				return nil
+			}
+			v.constraints = constraints
+			return nil
+		})
+		if err != nil {
+			return fmt.Errorf("error walking directory: %v", err)
+		}
+	}
+
 	return nil
 }
 
@@ -77,17 +102,25 @@ func (v *Viewer) getSubImage(spriteImage *ebiten.Image, x, y, size int) image.Im
 }
 
 func (v *Viewer) Draw(screen *ebiten.Image) {
-	ebitenutil.DebugPrintAt(screen, "Sprite Viewer", 0, 0)
+	ebitenutil.DebugPrintAt(screen, "Map Constraint Viewer", 0, 0)
+	if v.constraints == nil {
+		ebitenutil.DebugPrintAt(screen, "No constraints loaded", 0, 50)
+		return
+	}
+	for y := range v.constraints.Rules {
+		for x := range v.constraints.Rules[y] {
+			if !v.constraints.Rules[y][x].Occupied {
+				continue
+			}
+			tile := v.getSubImage(spriteImage, v.constraints.Rules[y][x].X, v.constraints.Rules[y][x].Y, 32)
 
-	ebitenutil.DebugPrintAt(screen, "Press C to copy to clipboard", 0, 40)
-
-	op := &ebiten.DrawImageOptions{}
-	op.GeoM.Translate(float64(screenWidth)/4, float64(screenHeight)/4)
-
-	// viewPanel := spriteImage.SubImage()
-
-	// screen.DrawImage(viewPanel.(*ebiten.Image), op)
-
+			op := &ebiten.DrawImageOptions{}
+			corX, corY := float64(screenWidth)/4+float64(x*32), float64(screenHeight)/4+float64(y*32)
+			op.GeoM.Translate(corX, corY)
+			ebitenutil.DebugPrintAt(screen, "X", int(corX), int(corY))
+			screen.DrawImage(tile.(*ebiten.Image), op)
+		}
+	}
 }
 
 func (v *Viewer) Layout(outsideWidth, outsideHeight int) (screenWidth, screenHeight int) {

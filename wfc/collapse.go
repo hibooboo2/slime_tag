@@ -2,9 +2,7 @@ package wfc
 
 import (
 	"encoding/json"
-	"fmt"
-	"log"
-	"os"
+	"io/fs"
 	"slices"
 	"strconv"
 
@@ -16,63 +14,67 @@ const (
 	Height = 20
 )
 
-type ConstraintToSolveFor struct {
-	rules [Height][Width]struct {
-		x int
-		y int
-	}
+type RulesCell struct {
+	X        int
+	Y        int
+	Occupied bool
 }
 
-func NewConstraintToSolveFor(filename string) map[string]*Constraint {
+type ConstraintToSolveFor struct {
+	Rules [Height][Width]RulesCell
+}
+
+func NewConstraintToSolveFor(fs fs.FS, filename string, spriteSize int) (*ConstraintToSolveFor, error) {
 	var cells []struct {
-		x  int
-		y  int
-		id string
+		X  int
+		Y  int
+		ID string `json:"id"`
 	}
-	data, err := os.ReadFile(filename)
+	data, err := fs.Open(filename)
 	if err != nil {
-		log.Fatal(err)
+		return nil, err
 	}
 
-	err = json.Unmarshal(data, &cells)
+	dec := json.NewDecoder(data)
+	dec.DisallowUnknownFields()
+	err = dec.Decode(&cells)
 	if err != nil {
-		log.Fatal(err)
+		return nil, err
 	}
 
 	c := ConstraintToSolveFor{}
 
-	constraints := make(map[string]*Constraint)
+	// constraints := make(map[string]*Constraint)
 	for _, cell := range cells {
-		id, err := strconv.Atoi(cell.id)
+		id, err := strconv.Atoi(cell.ID)
 		if err != nil {
 			continue
 		}
 		x := id / Width
 		y := id % Height
+		// log.Printf("cell: %s -> x: %d y: %d IMG: x: %d y: %d", cell.ID, x, y, cell.X, cell.Y)
 
-		c.rules[y][x] = struct {
-			x int
-			y int
-		}{cell.x, cell.y}
+		c.Rules[x][y] = RulesCell{X: -cell.X / spriteSize, Y: -cell.Y / spriteSize, Occupied: true}
 	}
 
-	for y := range c.rules {
-		for x := range c.rules[y] {
-			id := fmt.Sprintf("%d,%d", x, y)
-			constraint, ok := constraints[id]
-			if !ok {
-				constraint = &Constraint{
-					Value:              id,
-					AllowableNeighbors: [3][3][]string{},
-				}
-				constraints[id] = constraint
-			}
-			//XXX need to implement this. Use rules to create constraints.
-			// Add each neighbor as a poissble allowed for each usage of the id.
-		}
-	}
+	// for y := range c.rules {
+	// 	for x := range c.rules[y] {
+	// 		id := fmt.Sprintf("%d,%d", x, y)
+	// 		constraint, ok := constraints[id]
+	// 		if !ok {
+	// 			constraint = &Constraint{
+	// 				Value:              id,
+	// 				AllowableNeighbors: [3][3][]string{},
+	// 			}
+	// 			constraints[id] = constraint
+	// 		}
+	// 		//XXX need to implement this. Use rules to create constraints.
+	// 		// Add each neighbor as a poissble allowed for each usage of the id.
+	// 	}
+	// }
 
-	return constraints
+	// return constraints
+	return &c, nil
 }
 
 type Grid struct {

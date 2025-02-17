@@ -15,3 +15,9 @@ spriteviewer:
 .PHONY: mapmaker
 mapmaker:
 	cd cmd/mapmaker && python3 -m http.server 8000
+
+.PHONY: mapconstraintViewer
+mapconstraintViewer:
+	go mod tidy
+	GOOS=windows go build -o mapconstraintViewer.exe cmd/mapconstraintViewer/*.go
+	./mapconstraintViewer.exe $(file)
