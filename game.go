@@ -43,13 +43,12 @@ type Game struct {
 }
 
 func (g *Game) checkEnemyBulletCollisions() {
-	//XXX FIX THIS ITS BUGGED
-	for b := range *g.bullets {
+	for b := len(*g.bullets) - 1; b >= 0; b-- {
 		bullet, ok := (*g.bullets)[b].(*Bullet)
 		if !ok || bullet.collided {
 			continue
 		}
-		for e := range *g.entities {
+		for e := len(*g.entities) - 1; e >= 0; e-- {
 			enemy, ok := (*g.entities)[e].(*Enemy)
 			if !ok {
 				continue
@@ -58,13 +57,12 @@ func (g *Game) checkEnemyBulletCollisions() {
 				continue
 			}
 			// Define the enemy's bounding rectangle
-
 			enemyRect := enemy.getRect()
 			// Check if the bullet is within the enemy's rectangle
-			// The enemy is hit by bullets here wihch are a radius of 3px
 			if bullet.Overlaps(enemyRect, g) {
 				// Collision detected
 				enemy.hpBar.AddHP(-20)
+				bullet.collided = true // Mark the bullet as collided to prevent further hits
 				if enemy.hpBar.currentHP <= 0 {
 					g.enemiesKilled++                                                              // Increment the enemies killed count
 					g.AddFloatingText("+5 HP", g.player.x, g.player.y, color.RGBA{0, 255, 0, 255}) // Add healing text
@@ -81,16 +79,15 @@ func (g *Game) checkEnemyBulletCollisions() {
 						g.entities.Add(NewRandomPowerUp())
 					}
 				}
-				break
+				break // Exit the inner loop after hitting an enemy
 			}
-
 		}
 	}
 }
 
 func (g *Game) checkPlayerCollisions() {
-	for _, entitiy := range *g.entities {
-		if e, ok := entitiy.(ecs.Overlapper); ok {
+	for _, entity := range *g.entities {
+		if e, ok := entity.(ecs.Overlapper); ok {
 			// Define the player's bounding rectangle
 			playerRect := image.Rect(
 				int(g.player.x)+5, int(g.player.y)+5,

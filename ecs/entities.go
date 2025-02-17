@@ -42,3 +42,13 @@ func (e *Entities) Add(entity any) {
 	}
 	*e = append(*e, entity)
 }
+
+func (e *Entities) Remove(entity any) bool {
+	for i, ent := range *e {
+		if ent == entity {
+			(*e)[i] = nil
+			return true
+		}
+	}
+	return false
+}

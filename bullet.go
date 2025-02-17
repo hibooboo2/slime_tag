@@ -24,7 +24,7 @@ var _ ecs.Overlapper = &Bullet{}
 var _ ecs.Drawer = &Bullet{}
 
 func (b *Bullet) Remove() bool {
-	return time.Since(b.creationTime) > time.Second*10 || b.collided
+	return time.Since(b.creationTime) > time.Second*5 || b.collided
 }
 
 func (b *Bullet) Draw(screen *ebiten.Image, game ecs.Game) {
@@ -41,7 +41,8 @@ func (b *Bullet) Overlaps(r image.Rectangle, game ecs.Game) bool {
 
 	if ballRect.Overlaps(r) {
 		b.collided = true
+		return true
 	}
 
-	return true
+	return false
 }
