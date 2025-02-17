@@ -11,39 +11,37 @@ import (
 )
 
 type Game struct {
-	sprites             *ebiten.Image
-	entities            *ecs.Entities
-	menuOptions         []string
-	resolutionOptions   []string
-	selected            int
-	inMainMenu          bool
-	keys                *Keys
-	exit                bool
-	player              *Player
-	debugLogs           []string
-	lastLogTime         time.Time
-	settings            bool
-	bullets             *ecs.Entities
-	frameCount          int // Add a frame counter
-	gamepads            []ebiten.GamepadID
-	enemiesKilled       int           // Add a field to track the number of enemies killed
-	gameOver            bool          // Add a field to track if the game is over
-	lastEnemySpawn      time.Time     // Track when we last spawned an enemy
-	spawnInterval       time.Duration // Current interval between enemy spawns
-	scaleFactor         float32       // Add this line to define scaleFactor
-	lastPowerUpSpawn    time.Time     // Add this line to track the last power-up spawn time
-	floatingTexts       []*FloatingText
-	settingsOptions     []string
-	settingsSelected    int
-	debugMode           bool
-	showResolutions     bool // Whether to show resolution popup
-	resolutionIdx       int  // Currently selected resolution
-	paused              bool
-	headstonesCollected int // Add this line to track collected headstones
+	sprites           *ebiten.Image
+	entities          *ecs.Entities
+	menuOptions       []string
+	resolutionOptions []string
+	selected          int
+	inMainMenu        bool
+	keys              *Keys
+	exit              bool
+	player            *Player
+	debugLogs         []string
+	lastLogTime       time.Time
+	settings          bool
+	bullets           *ecs.Entities
+	frameCount        int // Add a frame counter
+	gamepads          []ebiten.GamepadID
+	enemiesKilled     int           // Add a field to track the number of enemies killed
+	gameOver          bool          // Add a field to track if the game is over
+	lastEnemySpawn    time.Time     // Track when we last spawned an enemy
+	spawnInterval     time.Duration // Current interval between enemy spawns
+	scaleFactor       float32       // Add this line to define scaleFactor
+	lastPowerUpSpawn  time.Time     // Add this line to track the last power-up spawn time
+	floatingTexts     []*FloatingText
+	settingsOptions   []string
+	settingsSelected  int
+	debugMode         bool
+	showResolutions   bool // Whether to show resolution popup
+	resolutionIdx     int  // Currently selected resolution
+	paused            bool
 }
 
 func (g *Game) checkEnemyBulletCollisions() {
-	//XXX FIX THIS ITS BUGGED
 	for b := range *g.bullets {
 		if (*g.bullets)[b] == nil {
 			continue
@@ -68,7 +66,7 @@ func (g *Game) checkEnemyBulletCollisions() {
 			// Check if the bullet is within the enemy's rectangle
 			if bullet.Overlaps(enemyRect, g) {
 				// Collision detected
-				enemy.hpBar.AddHP(-20)
+				enemy.hpBar.AddHP(-bullet.hp)
 				bullet.collided = true // Mark the bullet as collided to prevent further hits
 				if enemy.hpBar.currentHP <= 0 {
 					g.enemiesKilled++                                                              // Increment the enemies killed count

@@ -100,13 +100,14 @@ type HPBar struct {
 }
 
 type Player struct {
-	playerType    string
-	x, y          float64
-	attacking     bool
-	running       bool
-	movementAngle float32
-	spritePack    *SpritePack
-	hpBar         *HPBar
+	playerType          string
+	x, y                float64
+	attacking           bool
+	running             bool
+	movementAngle       float32
+	spritePack          *SpritePack
+	hpBar               *HPBar
+	headstonesCollected int // Add this line to track collected headstones
 }
 
 var sprites = map[string]*ebiten.Image{}
@@ -615,6 +616,7 @@ func (g *Game) handleGamepadInput() bool {
 					speed:        5,
 					radius:       4,
 					creationTime: time.Now(), // Initialize creationTime
+					hp:           20,
 				}
 				g.bullets.Add(bullet)
 			}
@@ -678,6 +680,7 @@ func (g *Game) Update() error {
 				speed:        10,
 				creationTime: time.Now(),
 				radius:       4,
+				hp:           20,
 			}
 			g.bullets.Add(bullet) // Add bullet to the bullets entity list
 		} else {
@@ -770,6 +773,7 @@ func (g *Game) Update() error {
 		g.entities.Add(NewRandomPowerUp())
 		g.lastPowerUpSpawn = time.Now()
 	}
+
 	// Update floating texts
 	var activeTexts []*FloatingText
 	for _, ft := range g.floatingTexts {
@@ -963,7 +967,7 @@ func (g *Game) drawSettings(screen *ebiten.Image) {
 
 func (g *Game) drawGameOver(screen *ebiten.Image) {
 	ebitenutil.DebugPrintAt(screen, "Game Over", 300, 150)
-	ebitenutil.DebugPrintAt(screen, fmt.Sprintf("Score: %d", (g.enemiesKilled*100)+(g.headstonesCollected*500)), 300, 200)
+	ebitenutil.DebugPrintAt(screen, fmt.Sprintf("Score: %d", (g.enemiesKilled*100)+(g.player.headstonesCollected*500)), 300, 200)
 	ebitenutil.DebugPrintAt(screen, "Press R to restart", 300, 250)
 }
 
@@ -1014,6 +1018,7 @@ func (box *StatusBox) Draw(screen *ebiten.Image, g *Game) {
 		{"Kills:", fmt.Sprintf("%d", box.killed), box.height * 0.45},
 		{"Score:", fmt.Sprintf("%d", (box.killed*100)+(500*box.headstones)), box.height * 0.65},
 		{"FPS:", fmt.Sprintf("%.0f", ebiten.ActualFPS()), box.height * 0.85},
+		{"Headstones:", fmt.Sprintf("%d", g.player.headstonesCollected), box.height * 1.05},
 	}
 
 	for _, txt := range texts {
@@ -1070,7 +1075,7 @@ func (g *Game) Draw(screen *ebiten.Image) {
 		y:          20,
 		enemies:    totalEnemiesAlive,
 		killed:     g.enemiesKilled,
-		headstones: g.headstonesCollected,
+		headstones: g.player.headstonesCollected,
 		scale:      g.scaleFactor,
 	}
 

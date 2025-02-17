@@ -29,8 +29,15 @@ func (b *Bullet) Remove() bool {
 }
 
 func (b *Bullet) Draw(screen *ebiten.Image, game ecs.Game) {
-	// g := game.(*Game)
+	g := game.(*Game)
 	vector.DrawFilledCircle(screen, b.x, b.y, float32(b.radius), color.RGBA{255, 255, 255, 255}, true) // White circle for bullets
+	if g.player.headstonesCollected%10 == 0 {
+		cntdwn := time.Now()
+		if time.Since(cntdwn) <= 10*time.Second {
+			b.hp = 50
+			vector.DrawFilledCircle(screen, b.x, b.y, float32(b.radius), color.RGBA{255, 255, 255, 255}, true)
+		}
+	}
 }
 
 func (b *Bullet) Overlaps(r image.Rectangle, game ecs.Game) bool {
