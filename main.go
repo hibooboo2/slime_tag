@@ -1143,6 +1143,7 @@ func (g *Game) Layout(outsideWidth, outsideHeight int) (int, int) {
 
 func (g *Game) resetGame() {
 	g.player.hpBar.currentHP = 100
+	g.player.headstonesCollected = 0
 	g.enemiesKilled = 0
 	g.gameOver = false
 	g.entities = &ecs.Entities{}
