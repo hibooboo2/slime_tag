@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/hibooboo2/slime_tag/ecs"
+	"github.com/hibooboo2/slime_tag/sound"
 )
 
 type HeadStone struct {
@@ -40,6 +41,7 @@ func (hs *HeadStone) Overlaps(r image.Rectangle, game ecs.Game) bool {
 	hs.collidedWithPlayer = headstoneRect.Overlaps(r)
 	if hs.collidedWithPlayer {
 		g.player.headstonesCollected += 1 // Increment headstones collected
+		sound.Play("headstone")
 		log.Printf("Headstone collided: %t adding point", hs.collidedWithPlayer)
 		log.Printf("Headstones collected: %d", g.player.headstonesCollected)
 		if g.player.headstonesCollected%10 == 0 {

@@ -65,6 +65,11 @@ func init() {
 	if err != nil {
 		fmt.Println("Error loading death sound:", err) // Log error
 	}
+	soundEffects["headstone"], err = loadSound("resources/sound_effects/zapsplat_cartoon_slime_drip_single_003_50313.mp3")
+	if err != nil {
+		fmt.Println("Error loading headstone sound:", err) // Log error
+	}
+
 	// Log loaded sounds
 	fmt.Println("Loaded sounds:", soundEffects)
 }
