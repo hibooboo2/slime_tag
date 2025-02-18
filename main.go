@@ -682,6 +682,9 @@ func (g *Game) Update() error {
 		// Handle shooting action with left mouse button
 		if ebiten.IsMouseButtonPressed(ebiten.MouseButtonLeft) && g.frameCount%10 == 0 {
 			g.player.attacking = true
+			if err := sound.Play("attack"); err != nil {
+				log.Println("Error playing sound:", err) // Log any errors
+			}
 			// Create bullet aimed at mouse position
 			bullet := &Bullet{
 				x:            float32(g.player.x) + 32,

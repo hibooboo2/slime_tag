@@ -57,7 +57,7 @@ func init() {
 	if err != nil {
 		fmt.Println("Error loading hit sound:", err) // Log error
 	}
-	soundEffects["attack"], err = loadSound("path/to/attack_sound.mp3")
+	soundEffects["attack"], err = loadSound("resources/sound_effects/zapsplat_cartoon_slime_bubble_single_001_72385.mp3")
 	if err != nil {
 		fmt.Println("Error loading attack sound:", err) // Log error
 	}
