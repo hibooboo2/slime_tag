@@ -25,6 +25,19 @@
             height: 32px;
             border: 1px solid #ccc;
             cursor: pointer;
+            position: relative;
+            font-size: 8px;
+            color: #666;
+        }
+        .grid-cell::after {
+            content: attr(data-coords);
+            font-size: 8px;
+            color: rgb(7, 252, 7);
+            font-family: Arial, sans-serif;
+            position: absolute;
+            top: 2px;
+            left: 2px;
+            pointer-events: none;
         }
         .right-panel {
             display: flex;
@@ -67,13 +80,18 @@
         };
 
         // Initialize grid
-        for (let i = 0; i < 40 * 20; i++) {
-            const cell = document.createElement('div');
-            cell.classList.add('grid-cell');
-            cell.dataset.id = i;
-            cell.addEventListener('click', placeSprite);
-            cell.addEventListener('contextmenu', removeSprite);
-            gridContainer.appendChild(cell);
+        for (let y = 0; y < 20; y++) {
+            for (let x = 0; x < 40; x++) {
+                const cell = document.createElement('div');
+                cell.classList.add('grid-cell');
+                cell.dataset.id = y * 40 + x;
+                cell.dataset.coords = `${x},${y}`;
+                cell.dataset.x = x;
+                cell.dataset.y = y;
+                cell.addEventListener('click', placeSprite);
+                cell.addEventListener('contextmenu', removeSprite);
+                gridContainer.appendChild(cell);
+            }
         }
 
         // Handle sprite selection
@@ -118,9 +136,10 @@
             document.querySelectorAll('.grid-cell').forEach(cell => {
                 if (cell.style.backgroundImage) {
                     gridData.push({
-                        id: cell.dataset.id,
-                        x: parseInt(cell.style.backgroundPositionX),
-                        y: parseInt(cell.style.backgroundPositionY)
+                        locX: parseInt(cell.dataset.x),
+                        locY: parseInt(cell.dataset.y),
+                        spriteLocX: parseInt(cell.style.backgroundPositionX),
+                        spriteLocY: parseInt(cell.style.backgroundPositionY)
                     });
                 }
             });

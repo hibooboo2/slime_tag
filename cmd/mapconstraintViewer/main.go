@@ -28,6 +28,7 @@ func main() {
 	ebiten.SetWindowSize(screenWidth, screenHeight)
 	ebiten.SetWindowTitle("Sprite Viewer")
 	ebiten.SetWindowResizable(true)
+	ebiten.SetScreenClearedEveryFrame(false)
 
 	log.Println("screenWidth", screenWidth, "screenHeight", screenHeight)
 
@@ -83,6 +84,7 @@ func (v *Viewer) Update() error {
 			}
 			constraints, err := wfc.NewConstraintToSolveFor(files, path, 32)
 			if err != nil {
+				log.Println("error parsing constraints", err)
 				return nil
 			}
 			v.constraints = constraints
@@ -107,20 +109,28 @@ func (v *Viewer) Draw(screen *ebiten.Image) {
 		ebitenutil.DebugPrintAt(screen, "No constraints loaded", 0, 50)
 		return
 	}
+	if v.constraints.Drawn {
+		return
+	}
+	screen.Clear()
 	for y := range v.constraints.Rules {
 		for x := range v.constraints.Rules[y] {
-			if !v.constraints.Rules[y][x].Occupied {
-				continue
-			}
-			tile := v.getSubImage(spriteImage, v.constraints.Rules[y][x].X, v.constraints.Rules[y][x].Y, 32)
+			corX, corY := float64(x*32), float64(y*32)
 
-			op := &ebiten.DrawImageOptions{}
-			corX, corY := float64(screenWidth)/4+float64(x*32), float64(screenHeight)/4+float64(y*32)
-			op.GeoM.Translate(corX, corY)
-			ebitenutil.DebugPrintAt(screen, "X", int(corX), int(corY))
-			screen.DrawImage(tile.(*ebiten.Image), op)
+			if v.constraints.Rules[y][x].Occupied {
+				log.Printf("Occupied x: %d, y: %d, SpriteX: %d, SpriteY: %d", x, y, v.constraints.Rules[y][x].X, v.constraints.Rules[y][x].Y)
+				tile := v.getSubImage(spriteImage, v.constraints.Rules[y][x].X, v.constraints.Rules[y][x].Y, 32)
+
+				op := &ebiten.DrawImageOptions{}
+				op.GeoM.Translate(corX+100, corY+100)
+				screen.DrawImage(tile.(*ebiten.Image), op)
+			}
+
+			ebitenutil.DebugPrintAt(screen, fmt.Sprintf("%d,%d", x, y), int(corX)+100, int(corY)+100)
+			// ebitenutil.DebugPrintAt(screen, fmt.Sprintf("%0.0f,%0.0f", corX, corY), int(corX), int(corY)+10)
 		}
 	}
+	v.constraints.Drawn = true
 }
 
 func (v *Viewer) Layout(outsideWidth, outsideHeight int) (screenWidth, screenHeight int) {

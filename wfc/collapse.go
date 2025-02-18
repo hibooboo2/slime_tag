@@ -3,8 +3,8 @@ package wfc
 import (
 	"encoding/json"
 	"io/fs"
+	"log"
 	"slices"
-	"strconv"
 
 	"golang.org/x/exp/rand"
 )
@@ -22,13 +22,15 @@ type RulesCell struct {
 
 type ConstraintToSolveFor struct {
 	Rules [Height][Width]RulesCell
+	Drawn bool
 }
 
 func NewConstraintToSolveFor(fs fs.FS, filename string, spriteSize int) (*ConstraintToSolveFor, error) {
 	var cells []struct {
-		X  int
-		Y  int
-		ID string `json:"id"`
+		LocX       int
+		LocY       int
+		SpriteLocX int
+		SpriteLocY int
 	}
 	data, err := fs.Open(filename)
 	if err != nil {
@@ -46,15 +48,8 @@ func NewConstraintToSolveFor(fs fs.FS, filename string, spriteSize int) (*Constr
 
 	// constraints := make(map[string]*Constraint)
 	for _, cell := range cells {
-		id, err := strconv.Atoi(cell.ID)
-		if err != nil {
-			continue
-		}
-		x := id / Width
-		y := id % Height
-		// log.Printf("cell: %s -> x: %d y: %d IMG: x: %d y: %d", cell.ID, x, y, cell.X, cell.Y)
-
-		c.Rules[x][y] = RulesCell{X: -cell.X / spriteSize, Y: -cell.Y / spriteSize, Occupied: true}
+		log.Printf("cell: x: %d y: %d IMG: x: %d y: %d", cell.LocX, cell.LocY, -cell.SpriteLocX/spriteSize, -cell.SpriteLocY/spriteSize)
+		c.Rules[cell.LocY][cell.LocX] = RulesCell{X: -cell.SpriteLocX / spriteSize, Y: -cell.SpriteLocY / spriteSize, Occupied: true}
 	}
 
 	// for y := range c.rules {
