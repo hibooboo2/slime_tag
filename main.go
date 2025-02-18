@@ -22,6 +22,7 @@ import (
 	"github.com/hajimehoshi/ebiten/v2/vector"
 	"github.com/hibooboo2/slime_tag/assets"
 	"github.com/hibooboo2/slime_tag/ecs"
+	"github.com/hibooboo2/slime_tag/sound"
 	"golang.org/x/image/font"
 	"golang.org/x/image/font/gofont/goregular"
 	"golang.org/x/image/font/opentype"
@@ -213,6 +214,7 @@ type Enemy struct {
 	movementAngle       float32
 	attacking           time.Time
 	shouldRemove        bool
+	soundPlayed         bool // New flag to track if the death sound has been played
 }
 
 var _ ecs.Overlapper = &Enemy{}
@@ -259,6 +261,13 @@ func (e *Enemy) Draw(screen *ebiten.Image, game ecs.Game) {
 	switch {
 	case e.hpBar.currentHP <= 0:
 		sprite = e.sprites.death
+		if !e.soundPlayed { // Check if the death sound has not been played
+			if err := sound.Play("death"); err != nil {
+				log.Println("Error playing sound:", err) // Log any errors
+			}
+			e.soundPlayed = true // Mark that the sound has been played
+		}
+
 	case e.hpBar.currentHP <= 50:
 		sprite = e.sprites.hurt
 	default:
@@ -275,7 +284,7 @@ func (e *Enemy) Draw(screen *ebiten.Image, game ecs.Game) {
 	isDone, subImage := sprite.GetCurrentSprite(g.frameCount, e.movementAngle)
 	if e.hpBar.currentHP <= 0 && isDone {
 		g.AddHeadStone(int(e.x), int(e.y))
-		e.shouldRemove = true
+		e.shouldRemove = true // Keep this line to mark for removal
 	}
 
 	screen.DrawImage(subImage, op)
