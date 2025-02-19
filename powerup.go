@@ -4,11 +4,13 @@ import (
 	"fmt"
 	"image"
 	"image/color"
+	"log"
 	"math/rand"
 	"time"
 
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hibooboo2/slime_tag/ecs"
+	"github.com/hibooboo2/slime_tag/sound"
 )
 
 func NewRandomPowerUp() *PowerUp {
@@ -59,6 +61,9 @@ func (pu *PowerUp) Overlaps(r image.Rectangle, game ecs.Game) bool {
 
 	switch pu.bonus {
 	case 0:
+		if err := sound.Play("healing powerup"); err != nil {
+			log.Println("Error playing sound:", err) // Log any errors
+		}
 		g.player.hpBar.AddHP(20)
 		g.AddFloatingText("+20 HP", float64(pu.x), float64(pu.y), color.RGBA{0, 255, 0, 255})
 	case 1:

@@ -61,7 +61,7 @@ func init() {
 	if err != nil {
 		fmt.Println("Error loading attack sound:", err) // Log error
 	}
-	soundEffects["death"], err = loadSound("resources/sound_effects/zapsplat_cartoon_slime_hit_007_89580.mp3")
+	soundEffects["death"], err = loadSound("resources/sound_effects/zapsplat_cartoon_whoosh_into_wet_slimy_impact_hit_003_48723.mp3")
 	if err != nil {
 		fmt.Println("Error loading death sound:", err) // Log error
 	}
@@ -71,7 +71,11 @@ func init() {
 	}
 	soundEffects["powerattack"], err = loadSound("resources/sound_effects/zapsplat_cartoon_slime_drip_or_bubble_pop_002_65988.mp3")
 	if err != nil {
-		fmt.Println("Error loading headstone sound:", err) // Log error
+		fmt.Println("Error loading powerup attack sound:", err) // Log error
+	}
+	soundEffects["healing powerup"], err = loadSound("resources/sound_effects/zapsplat_fantasy_dark_magic_whoosh_evil_spirit_or_demon_banish_slime_002_89592.mp3")
+	if err != nil {
+		fmt.Println("Error loading healing powerup attack sound:", err) // Log error
 	}
 
 	// Log loaded sounds
