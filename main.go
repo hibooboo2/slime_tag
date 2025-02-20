@@ -149,8 +149,8 @@ func NewSpritePack(slimeName string) *SpritePack {
 func NewPlayer(playerType string, spritePack *SpritePack) (*Player, error) {
 	return &Player{
 		playerType: playerType,
-		x:          100, // Center of the screen horizontally
-		y:          100, // Center of the screen vertically
+		x:          960, // Center of the screen 1080
+		y:          540, // Center of the screen 1080
 		spritePack: spritePack,
 		hpBar:      NewHPBar(100),
 	}, nil
