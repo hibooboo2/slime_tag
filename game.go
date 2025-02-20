@@ -12,6 +12,7 @@ import (
 
 type Game struct {
 	sprites             *ebiten.Image
+	spritesCache        map[image.Rectangle]*ebiten.Image
 	entities            *ecs.Entities
 	menuOptions         []string
 	resolutionOptions   []string

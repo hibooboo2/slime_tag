@@ -75,6 +75,7 @@ func init() {
 }
 
 type AnimatedSprite struct {
+	name               string
 	image              *ebiten.Image
 	width              int
 	frame              int
@@ -82,6 +83,14 @@ type AnimatedSprite struct {
 	frameWidth         int
 	frameHeight        int
 }
+
+type animatedSpriteID struct {
+	Name  string
+	Frame int
+	image.Rectangle
+}
+
+var animatedSpritesCache = map[animatedSpriteID]*ebiten.Image{}
 
 type SpritePack struct {
 	attack *AnimatedSprite
@@ -114,7 +123,7 @@ type Player struct {
 
 var sprites = map[string]*ebiten.Image{}
 
-func NewSprite(fileName string, width int) *AnimatedSprite {
+func NewSprite(fileName string, name string, width int) *AnimatedSprite {
 	spriteImage, ok := sprites[fileName]
 	if !ok {
 		var err error
@@ -126,6 +135,7 @@ func NewSprite(fileName string, width int) *AnimatedSprite {
 	}
 
 	return &AnimatedSprite{
+		name:        name,
 		image:       spriteImage,
 		width:       width,
 		frameWidth:  64,
@@ -136,12 +146,12 @@ func NewSprite(fileName string, width int) *AnimatedSprite {
 func NewSpritePack(slimeName string) *SpritePack {
 	sp := &SpritePack{}
 
-	sp.attack = NewSprite(fmt.Sprintf("resources/slimes/PNG/%[1]s/Attack/%[1]s_Attack_full.png", slimeName), 10)
-	sp.death = NewSprite(fmt.Sprintf("resources/slimes/PNG/%[1]s/Death/%[1]s_Death_full.png", slimeName), 10)
-	sp.hurt = NewSprite(fmt.Sprintf("resources/slimes/PNG/%[1]s/Hurt/%[1]s_Hurt_full.png", slimeName), 5)
-	sp.idle = NewSprite(fmt.Sprintf("resources/slimes/PNG/%[1]s/Idle/%[1]s_Idle_full.png", slimeName), 6)
-	sp.run = NewSprite(fmt.Sprintf("resources/slimes/PNG/%[1]s/Run/%[1]s_Run_full.png", slimeName), 8)
-	sp.walk = NewSprite(fmt.Sprintf("resources/slimes/PNG/%[1]s/Walk/%[1]s_Walk_full.png", slimeName), 8)
+	sp.attack = NewSprite(fmt.Sprintf("resources/slimes/PNG/%[1]s/Attack/%[1]s_Attack_full.png", slimeName), slimeName+"Attack", 10)
+	sp.death = NewSprite(fmt.Sprintf("resources/slimes/PNG/%[1]s/Death/%[1]s_Death_full.png", slimeName), slimeName+"Death", 10)
+	sp.hurt = NewSprite(fmt.Sprintf("resources/slimes/PNG/%[1]s/Hurt/%[1]s_Hurt_full.png", slimeName), slimeName+"Hurt", 5)
+	sp.idle = NewSprite(fmt.Sprintf("resources/slimes/PNG/%[1]s/Idle/%[1]s_Idle_full.png", slimeName), slimeName+"Idle", 6)
+	sp.run = NewSprite(fmt.Sprintf("resources/slimes/PNG/%[1]s/Run/%[1]s_Run_full.png", slimeName), slimeName+"Run", 8)
+	sp.walk = NewSprite(fmt.Sprintf("resources/slimes/PNG/%[1]s/Walk/%[1]s_Walk_full.png", slimeName), slimeName+"Walk", 8)
 
 	return sp
 }
@@ -192,7 +202,15 @@ func (sprite *AnimatedSprite) GetCurrentSprite(frameCount int, movementAngle flo
 	}
 	sprite.lastGameFrameCount = frameCount
 
-	return isFinished, sprite.image.SubImage(image.Rect(x, direction*sprite.frameHeight, x+sprite.frameWidth, direction*sprite.frameHeight+sprite.frameHeight)).(*ebiten.Image)
+	spriteRect := image.Rect(x, direction*sprite.frameHeight, x+sprite.frameWidth, direction*sprite.frameHeight+sprite.frameHeight)
+
+	img, ok := animatedSpritesCache[animatedSpriteID{Name: sprite.name, Frame: sprite.frame, Rectangle: spriteRect}]
+	if !ok {
+		img = sprite.image.SubImage(spriteRect).(*ebiten.Image)
+		animatedSpritesCache[animatedSpriteID{Name: sprite.name, Frame: sprite.frame, Rectangle: spriteRect}] = img
+	}
+
+	return isFinished, img
 }
 
 type Intention int
@@ -1242,6 +1260,7 @@ func main() {
 		debugMode:        settings.DebugMode,
 		sprites:          sprites,
 		paused:           true,
+		spritesCache:     map[image.Rectangle]*ebiten.Image{},
 	}
 
 	if game.debugMode {
