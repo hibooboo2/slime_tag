@@ -784,8 +784,8 @@ func (g *Game) Update() error {
 
 	// Check if it's time to spawn a new enemy
 	if time.Since(g.lastEnemySpawn) >= g.spawnInterval {
-		x := rand.Intn(screenWidth / 2)
-		y := rand.Intn(screenHeight / 2)
+		x := rand.Intn(screenWidth)
+		y := rand.Intn(screenHeight)
 		g.entities.Add(NewEnemy(enemyTypes[rand.Intn(len(enemyTypes))], float64(x), float64(y)))
 		g.lastEnemySpawn = time.Now()
 	}

@@ -75,7 +75,11 @@ func (g *Game) checkEnemyBulletCollisions() {
 					g.player.hpBar.AddHP(5)
 
 					// Reduce spawn interval by 15ms per kill, with a minimum of 100ms
-					g.spawnInterval -= 15 * time.Millisecond
+					if g.enemiesKilled < 30 {
+						g.spawnInterval -= 45 * time.Millisecond
+					} else {
+						g.spawnInterval -= 25 * time.Millisecond
+					}
 					if g.spawnInterval < 100*time.Millisecond {
 						g.spawnInterval = 100 * time.Millisecond // Ensure a minimum spawn interval
 					}
