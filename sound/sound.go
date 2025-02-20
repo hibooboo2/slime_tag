@@ -77,6 +77,10 @@ func init() {
 	if err != nil {
 		fmt.Println("Error loading healing powerup attack sound:", err) // Log error
 	}
+	soundEffects["player damage"], err = loadSound("resources/sound_effects/zapsplat_science_fiction_impact_alien_body_hit_hard_crack_squelch_bloody_004_44158.mp3")
+	if err != nil {
+		fmt.Println("Error loading player damage sound:", err) // Log error
+	}
 
 	// Log loaded sounds
 	fmt.Println("Loaded sounds:", soundEffects)

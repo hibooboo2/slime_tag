@@ -61,12 +61,17 @@ func (pu *PowerUp) Overlaps(r image.Rectangle, game ecs.Game) bool {
 
 	switch pu.bonus {
 	case 0:
+		//play healing sound
 		if err := sound.Play("healing powerup"); err != nil {
 			log.Println("Error playing sound:", err) // Log any errors
 		}
 		g.player.hpBar.AddHP(20)
 		g.AddFloatingText("+20 HP", float64(pu.x), float64(pu.y), color.RGBA{0, 255, 0, 255})
 	case 1:
+		//play damage sound
+		if err := sound.Play("player damage"); err != nil {
+			log.Println("Error playing sound:", err) // Log any errors
+		}
 		g.player.hpBar.AddHP(-10)
 		g.AddFloatingText("-10 HP", float64(pu.x), float64(pu.y), color.RGBA{255, 0, 0, 255})
 	}

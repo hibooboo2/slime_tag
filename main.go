@@ -239,7 +239,10 @@ func (e *Enemy) Overlaps(r image.Rectangle, game ecs.Game) bool {
 		if r.Overlaps(e.getRect()) {
 			// Damage the player
 			g.player.hpBar.AddHP(-10)
-
+			//play damage sound
+			if err := sound.Play("player damage"); err != nil {
+				log.Println("Error playing sound:", err) // Log any errors
+			}
 			// Add floating text for damage
 			g.AddFloatingText("-10 HP", g.player.x, g.player.y, color.RGBA{255, 0, 0, 255}) // Red text for damage
 		}
