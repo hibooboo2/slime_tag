@@ -7,10 +7,11 @@ import (
 
 	"github.com/hibooboo2/slime_tag/ecs"
 	"github.com/hibooboo2/slime_tag/sound"
+	"github.com/hibooboo2/slime_tag/sprites"
 )
 
 type HeadStone struct {
-	Sprite
+	sprites.Sprite
 	deathTime          time.Time
 	collidedWithPlayer bool
 }
@@ -35,8 +36,8 @@ func (hs *HeadStone) Overlaps(r image.Rectangle, game ecs.Game) bool {
 
 	// Define the headstone's bounding rectangle
 	headstoneRect := image.Rect(
-		hs.locX, hs.locY,
-		hs.locX+hs.size, hs.locY+hs.size,
+		hs.LocX, hs.LocY,
+		hs.LocX+hs.Size, hs.LocY+hs.Size,
 	)
 	hs.collidedWithPlayer = headstoneRect.Overlaps(r)
 	if hs.collidedWithPlayer {

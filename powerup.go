@@ -11,6 +11,7 @@ import (
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hibooboo2/slime_tag/ecs"
 	"github.com/hibooboo2/slime_tag/sound"
+	"github.com/hibooboo2/slime_tag/sprites"
 )
 
 func NewRandomPowerUp() *PowerUp {
@@ -22,15 +23,15 @@ func NewRandomPowerUp() *PowerUp {
 	}
 	switch p.bonus {
 	case 0:
-		p.icon = NewSprite(fmt.Sprintf("resources/slimes/PNG/%[1]s/Idle/%[1]s_Idle_full.png", "Slime3"), "Slime3Idle", 6)
+		p.icon = sprites.NewSprite(fmt.Sprintf("resources/slimes/PNG/%[1]s/Idle/%[1]s_Idle_full.png", "Slime3"), "Slime3Idle", 6)
 	case 1:
-		p.icon = NewSprite(fmt.Sprintf("resources/slimes/PNG/%[1]s/Attack/%[1]s_Attack_full.png", "Slime3"), "Slime3Attack", 10)
+		p.icon = sprites.NewSprite(fmt.Sprintf("resources/slimes/PNG/%[1]s/Attack/%[1]s_Attack_full.png", "Slime3"), "Slime3Attack", 10)
 	}
 	return p
 }
 
 type PowerUp struct {
-	icon      *AnimatedSprite
+	icon      *sprites.AnimatedSprite
 	x, y      float64
 	spawnTime time.Time
 	bonus     int

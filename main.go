@@ -23,6 +23,7 @@ import (
 	"github.com/hibooboo2/slime_tag/assets"
 	"github.com/hibooboo2/slime_tag/ecs"
 	"github.com/hibooboo2/slime_tag/sound"
+	"github.com/hibooboo2/slime_tag/sprites"
 	"golang.org/x/image/font"
 	"golang.org/x/image/font/gofont/goregular"
 	"golang.org/x/image/font/opentype"
@@ -74,33 +75,6 @@ func init() {
 	backgroundImage = caveImg // Use the same loaded image for the main background
 }
 
-type AnimatedSprite struct {
-	name               string
-	image              *ebiten.Image
-	width              int
-	frame              int
-	lastGameFrameCount int
-	frameWidth         int
-	frameHeight        int
-}
-
-type animatedSpriteID struct {
-	Name  string
-	Frame int
-	image.Rectangle
-}
-
-var animatedSpritesCache = map[animatedSpriteID]*ebiten.Image{}
-
-type SpritePack struct {
-	attack *AnimatedSprite
-	death  *AnimatedSprite
-	hurt   *AnimatedSprite
-	idle   *AnimatedSprite
-	run    *AnimatedSprite
-	walk   *AnimatedSprite
-}
-
 type HPBar struct {
 	lastDamageTime time.Time
 	currentOpacity float64
@@ -115,48 +89,13 @@ type Player struct {
 	attacking           bool
 	running             bool
 	movementAngle       float64
-	spritePack          *SpritePack
+	spritePack          *sprites.SpritePack
 	hpBar               *HPBar
 	headstonesCollected int // Add this line to track collected headstones
 	headstonePowerup    time.Time
 }
 
-var sprites = map[string]*ebiten.Image{}
-
-func NewSprite(fileName string, name string, width int) *AnimatedSprite {
-	spriteImage, ok := sprites[fileName]
-	if !ok {
-		var err error
-		spriteImage, _, err = ebitenutil.NewImageFromFileSystem(assets.Resources, fileName) // Load the sprite image
-		if err != nil {
-			panic(err)
-		}
-		sprites[fileName] = spriteImage
-	}
-
-	return &AnimatedSprite{
-		name:        name,
-		image:       spriteImage,
-		width:       width,
-		frameWidth:  64,
-		frameHeight: 64,
-	}
-}
-
-func NewSpritePack(slimeName string) *SpritePack {
-	sp := &SpritePack{}
-
-	sp.attack = NewSprite(fmt.Sprintf("resources/slimes/PNG/%[1]s/Attack/%[1]s_Attack_full.png", slimeName), slimeName+"Attack", 10)
-	sp.death = NewSprite(fmt.Sprintf("resources/slimes/PNG/%[1]s/Death/%[1]s_Death_full.png", slimeName), slimeName+"Death", 10)
-	sp.hurt = NewSprite(fmt.Sprintf("resources/slimes/PNG/%[1]s/Hurt/%[1]s_Hurt_full.png", slimeName), slimeName+"Hurt", 5)
-	sp.idle = NewSprite(fmt.Sprintf("resources/slimes/PNG/%[1]s/Idle/%[1]s_Idle_full.png", slimeName), slimeName+"Idle", 6)
-	sp.run = NewSprite(fmt.Sprintf("resources/slimes/PNG/%[1]s/Run/%[1]s_Run_full.png", slimeName), slimeName+"Run", 8)
-	sp.walk = NewSprite(fmt.Sprintf("resources/slimes/PNG/%[1]s/Walk/%[1]s_Walk_full.png", slimeName), slimeName+"Walk", 8)
-
-	return sp
-}
-
-func NewPlayer(playerType string, spritePack *SpritePack) (*Player, error) {
+func NewPlayer(playerType string, spritePack *sprites.SpritePack) (*Player, error) {
 	return &Player{
 		playerType: playerType,
 		x:          960, // Center of the screen 1080
@@ -164,53 +103,6 @@ func NewPlayer(playerType string, spritePack *SpritePack) (*Player, error) {
 		spritePack: spritePack,
 		hpBar:      NewHPBar(100),
 	}, nil
-}
-
-func (sprite *AnimatedSprite) GetCurrentSprite(frameCount int, movementAngle float64) (bool, *ebiten.Image) {
-	fps := int(ebiten.ActualFPS())
-	if fps == 0 {
-		fps = 60
-	}
-
-	if fps > 7 && frameCount%(fps/7) == 0 {
-		sprite.frame++
-	}
-
-	x := (sprite.frame % sprite.width) * sprite.frameWidth
-
-	// Determine direction based on movementAngle
-	var direction int
-	switch {
-	case movementAngle >= -45 && movementAngle < 45:
-		direction = 3
-	case movementAngle >= 45 && movementAngle < 135:
-		direction = 0
-	case movementAngle >= 135 || movementAngle < -135:
-		direction = 2
-	case movementAngle >= -135 && movementAngle < -45:
-		direction = 1
-	}
-
-	isFinished := sprite.frame == sprite.width
-
-	if sprite.lastGameFrameCount != frameCount-1 {
-		sprite.frame = 0
-	}
-
-	if sprite.frame >= sprite.width {
-		sprite.frame = 0
-	}
-	sprite.lastGameFrameCount = frameCount
-
-	spriteRect := image.Rect(x, direction*sprite.frameHeight, x+sprite.frameWidth, direction*sprite.frameHeight+sprite.frameHeight)
-
-	img, ok := animatedSpritesCache[animatedSpriteID{Name: sprite.name, Frame: sprite.frame, Rectangle: spriteRect}]
-	if !ok {
-		img = sprite.image.SubImage(spriteRect).(*ebiten.Image)
-		animatedSpritesCache[animatedSpriteID{Name: sprite.name, Frame: sprite.frame, Rectangle: spriteRect}] = img
-	}
-
-	return isFinished, img
 }
 
 type Intention int
@@ -224,7 +116,7 @@ const (
 type Enemy struct {
 	thoughtSpeed        time.Duration
 	x, y                float64
-	sprites             *SpritePack
+	sprites             *sprites.SpritePack
 	hpBar               *HPBar
 	lastIntentionChange time.Time
 	intention           Intention
@@ -243,14 +135,14 @@ var _ ecs.Drawer = &Enemy{}
 func (e *Enemy) getRect() image.Rectangle {
 	hitBoxSize := 20
 	return image.Rect(
-		int(e.x)+e.sprites.idle.frameWidth/2-hitBoxSize/2, int(e.y)+e.sprites.idle.frameHeight/2-hitBoxSize/2,
-		int(e.x)+e.sprites.idle.frameWidth/2+hitBoxSize/2, int(e.y)+e.sprites.idle.frameHeight/2+hitBoxSize/2,
+		int(e.x)+e.sprites.SpriteWidth/2-hitBoxSize/2, int(e.y)+e.sprites.SpriteWidth/2-hitBoxSize/2,
+		int(e.x)+e.sprites.SpriteWidth/2+hitBoxSize/2, int(e.y)+e.sprites.SpriteWidth/2+hitBoxSize/2,
 	)
 }
 
 func (e *Enemy) Overlaps(r image.Rectangle, game ecs.Game) bool {
 	g := game.(*Game)
-	if !(g.frameCount%10 == 0) {
+	if !(g.frameCount%8 == 0) {
 		return false
 	}
 
@@ -280,10 +172,10 @@ func (e *Enemy) Draw(screen *ebiten.Image, game ecs.Game) {
 	drawHPBar(screen, e.x, e.y-10, e.hpBar, color.RGBA{255, 0, 0, 255})
 
 	// Use SubImage to get the desired part of the sprite
-	var sprite *AnimatedSprite
+	var sprite *sprites.AnimatedSprite
 	switch {
 	case e.hpBar.currentHP <= 0:
-		sprite = e.sprites.death
+		sprite = e.sprites.Death
 		if !e.soundPlayed { // Check if the death sound has not been played
 			if err := sound.Play("death"); err != nil {
 				log.Println("Error playing sound:", err) // Log any errors
@@ -292,15 +184,15 @@ func (e *Enemy) Draw(screen *ebiten.Image, game ecs.Game) {
 		}
 
 	case e.hpBar.currentHP <= 50 && e.hpBar.visible:
-		sprite = e.sprites.hurt
+		sprite = e.sprites.Hurt
 	default:
 		switch e.intention {
 		case Idle:
-			sprite = e.sprites.idle
+			sprite = e.sprites.Idle
 		case Chase:
-			sprite = e.sprites.run
+			sprite = e.sprites.Run
 		case Attack:
-			sprite = e.sprites.attack
+			sprite = e.sprites.Attack
 		}
 	}
 
@@ -330,10 +222,10 @@ func NewEnemy(slimeName string, startX, startY float64) *Enemy {
 	e := &Enemy{
 		x:             startX,
 		y:             startY,
-		sprites:       NewSpritePack(slimeName),
+		sprites:       sprites.NewSlimeSpritePack(slimeName),
 		intention:     Idle,
 		thoughtSpeed:  time.Duration(rand.Intn(3000)+600) * time.Millisecond,
-		movementSpeed: rand.Float64() * 1.4,
+		movementSpeed: (rand.Float64() * 1.8) + 3/4,
 		hpBar:         NewHPBar(100),
 	}
 	return e
@@ -370,9 +262,6 @@ func (e *Enemy) RandomMovement(playerX, playerY float64) {
 		}
 	}
 
-	if length < 50 {
-		e.intention = Attack
-	}
 	// Randomly change direction
 	n := rand.Intn(100)
 	if time.Since(e.lastIntentionChange) > e.thoughtSpeed {
@@ -387,9 +276,22 @@ func (e *Enemy) RandomMovement(playerX, playerY float64) {
 		e.lastIntentionChange = time.Now()
 	}
 
+	if length < 10 {
+		e.intention = Attack
+		e.dx = (dx / length) * 2
+		e.dy = (dy / length) * 2
+		e.movementAngle = float64(math.Atan2(float64(dy), float64(dx)) * (180 / math.Pi))
+		e.lastIntentionChange = time.Now()
+	}
+
+	chaseAdd := 1.0
+	if e.intention == Chase {
+		chaseAdd = 1.5
+	}
+
 	// Move the enemy
-	e.x += e.dx * e.movementSpeed // Adjust speed as needed
-	e.y += e.dy * e.movementSpeed // Adjust speed as needed
+	e.x += e.dx * e.movementSpeed * chaseAdd // Adjust speed as needed
+	e.y += e.dy * e.movementSpeed * chaseAdd // Adjust speed as needed
 
 	// Ensure the enemy stays within bounds
 	if e.x < 0 {
@@ -671,7 +573,7 @@ func (g *Game) handleGamepadInput() bool {
 					speed:        5,
 					radius:       4,
 					creationTime: time.Now(), // Initialize creationTime
-					hp:           20,
+					hp:           35,
 				}
 				g.bullets.Add(bullet)
 			}
@@ -736,7 +638,7 @@ func (g *Game) Update() error {
 				speed:        10,
 				creationTime: time.Now(),
 				radius:       4,
-				hp:           20,
+				hp:           35,
 			}
 			if time.Since(g.player.headstonePowerup) < 10*time.Second {
 				bullet.hp = 50
@@ -932,21 +834,21 @@ func (g *Game) drawGameView(screen *ebiten.Image) {
 	arrowY := 32 + g.player.y + arrowLength*math.Sin(rad)
 	drawArc(screen, float32(arrowX), float32(arrowY), 5, float32(rad-20), float32(rad+20), color.RGBA{255, 255, 0, 255}) // Yellow circle for arrow head
 
-	sprite := g.player.spritePack.idle
+	sprite := g.player.spritePack.Idle
 	switch {
 	case g.player.hpBar.currentHP <= 0:
-		sprite = g.player.spritePack.death
+		sprite = g.player.spritePack.Death
 	case g.player.hpBar.currentHP <= 50:
-		sprite = g.player.spritePack.hurt
+		sprite = g.player.spritePack.Hurt
 	case g.player.attacking:
-		sprite = g.player.spritePack.attack
+		sprite = g.player.spritePack.Attack
 	case g.player.running:
-		sprite = g.player.spritePack.run
+		sprite = g.player.spritePack.Run
 	}
 
 	playerRect := image.Rect(
-		int(g.player.x)+g.player.spritePack.idle.frameWidth/2-10, int(g.player.y)+g.player.spritePack.idle.frameHeight/2-10,
-		int(g.player.x)+g.player.spritePack.idle.frameWidth/2+10, int(g.player.y)+g.player.spritePack.idle.frameHeight/2+10,
+		int(g.player.x)+g.player.spritePack.SpriteWidth/2-10, int(g.player.y)+g.player.spritePack.SpriteWidth/2-10,
+		int(g.player.x)+g.player.spritePack.SpriteWidth/2+10, int(g.player.y)+g.player.spritePack.SpriteWidth/2+10,
 	)
 
 	if g.debugMode {
@@ -985,7 +887,7 @@ func (g *Game) addDebugLog(log string) {
 }
 
 func (g *Game) AddHeadStone(x, y int) {
-	g.entities.Add(&HeadStone{Sprite: Sprite{locX: x, locY: y, spriteX: 0 + rand.Intn(5), spriteY: 1, size: 32}, deathTime: time.Now()})
+	g.entities.Add(&HeadStone{Sprite: *sprites.NewSpriteFromSpriteSheet(g.sprites, x, y, 32, rand.Intn(5), 1), deathTime: time.Now()})
 }
 
 func (g *Game) drawDebugLogs(screen *ebiten.Image) {
@@ -1225,7 +1127,7 @@ func GetMaxScreenSize() (int, int) {
 func main() {
 	// Get the maximum screen size for the primary monitor
 	// screenWidth, screenHeight = GetMaxScreenSize()
-	sprites, _, err := ebitenutil.NewImageFromFileSystem(assets.Resources, "resources/slimes/ProjectUtumno_full.png") // Load the sprite image
+	spriteSheet, _, err := ebitenutil.NewImageFromFileSystem(assets.Resources, "resources/slimes/ProjectUtumno_full.png") // Load the sprite image
 	if err != nil {
 		panic(err)
 	}
@@ -1239,7 +1141,7 @@ func main() {
 
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
 
-	p, err := NewPlayer("circle", NewSpritePack("Slime1"))
+	p, err := NewPlayer("circle", sprites.NewSlimeSpritePack("Slime1"))
 	if err != nil {
 		log.Fatal(err) // Log and exit if there's an error
 	}
@@ -1281,9 +1183,8 @@ func main() {
 		lastLogTime:      time.Now(),
 		scaleFactor:      1.0,
 		debugMode:        settings.DebugMode,
-		sprites:          sprites,
+		sprites:          spriteSheet,
 		paused:           true,
-		spritesCache:     map[image.Rectangle]*ebiten.Image{},
 	}
 
 	if game.debugMode {

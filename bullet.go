@@ -30,7 +30,7 @@ func (b *Bullet) Remove() bool {
 
 func (b *Bullet) Draw(screen *ebiten.Image, game ecs.Game) {
 	//g := game.(*Game)
-	if b.hp > 20 {
+	if b.hp > 40 {
 		vector.DrawFilledCircle(screen, b.x, b.y, float32(b.radius), color.RGBA{255, 0, 0, 0}, true)
 	} else {
 		vector.DrawFilledCircle(screen, b.x, b.y, float32(b.radius), color.RGBA{255, 255, 255, 255}, true) // White circle for bullets
