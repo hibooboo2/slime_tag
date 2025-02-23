@@ -13,7 +13,7 @@ import (
 
 type Bullet struct {
 	x, y         float32
-	angle        float32
+	angle        float64
 	speed        float32
 	creationTime time.Time // Add creationTime to track bullet age
 	hp           int

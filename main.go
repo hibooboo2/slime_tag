@@ -114,7 +114,7 @@ type Player struct {
 	x, y                float64
 	attacking           bool
 	running             bool
-	movementAngle       float32
+	movementAngle       float64
 	spritePack          *SpritePack
 	hpBar               *HPBar
 	headstonesCollected int // Add this line to track collected headstones
@@ -166,7 +166,7 @@ func NewPlayer(playerType string, spritePack *SpritePack) (*Player, error) {
 	}, nil
 }
 
-func (sprite *AnimatedSprite) GetCurrentSprite(frameCount int, movementAngle float32) (bool, *ebiten.Image) {
+func (sprite *AnimatedSprite) GetCurrentSprite(frameCount int, movementAngle float64) (bool, *ebiten.Image) {
 	fps := int(ebiten.ActualFPS())
 	if fps == 0 {
 		fps = 60
@@ -222,6 +222,7 @@ const (
 )
 
 type Enemy struct {
+	thoughtSpeed        time.Duration
 	x, y                float64
 	sprites             *SpritePack
 	hpBar               *HPBar
@@ -229,7 +230,8 @@ type Enemy struct {
 	intention           Intention
 	speed               float64
 	dx, dy              float64
-	movementAngle       float32
+	movementAngle       float64
+	movementSpeed       float64
 	attacking           time.Time
 	shouldRemove        bool
 	soundPlayed         bool // New flag to track if the death sound has been played
@@ -289,7 +291,7 @@ func (e *Enemy) Draw(screen *ebiten.Image, game ecs.Game) {
 			e.soundPlayed = true // Mark that the sound has been played
 		}
 
-	case e.hpBar.currentHP <= 50:
+	case e.hpBar.currentHP <= 50 && e.hpBar.visible:
 		sprite = e.sprites.hurt
 	default:
 		switch e.intention {
@@ -326,11 +328,13 @@ var enemyTypes = []string{
 
 func NewEnemy(slimeName string, startX, startY float64) *Enemy {
 	e := &Enemy{
-		x:         startX,
-		y:         startY,
-		sprites:   NewSpritePack(slimeName),
-		intention: Idle,
-		hpBar:     NewHPBar(100),
+		x:             startX,
+		y:             startY,
+		sprites:       NewSpritePack(slimeName),
+		intention:     Idle,
+		thoughtSpeed:  time.Duration(rand.Intn(3000)+600) * time.Millisecond,
+		movementSpeed: rand.Float64() * 1.4,
+		hpBar:         NewHPBar(100),
 	}
 	return e
 }
@@ -339,33 +343,53 @@ func (e *Enemy) RandomMovement(playerX, playerY float64) {
 	if e.hpBar.currentHP < 1 {
 		return
 	}
-	// Randomly change direction
-	if time.Since(e.lastIntentionChange) > time.Duration(rand.Intn(1400)+600)*time.Millisecond {
-		switch {
-		case rand.Intn(100) > 40:
-			e.intention = Attack
-		case rand.Intn(100) > 15:
+
+	dx := playerX - e.x
+	dy := playerY - e.y
+	length := math.Sqrt(dx*dx + dy*dy)
+
+	if time.Since(e.lastIntentionChange) < e.thoughtSpeed {
+		switch e.intention {
+		case Attack:
+		case Chase:
 			// Change direction towards the player
-			e.intention = Chase
-			dx := playerX - e.x
-			dy := playerY - e.y
-			length := math.Sqrt(dx*dx + dy*dy)
 			e.dx = (dx / length) * 2
 			e.dy = (dy / length) * 2
-			e.movementAngle = float32(math.Atan2(float64(dy), float64(dx)) * (180 / math.Pi))
+			e.movementAngle = float64(math.Atan2(float64(dy), float64(dx)) * (180 / math.Pi))
+		case Idle:
+			if length > 350 {
+				angle := rand.Float64() * 2 * math.Pi
+				e.movementAngle = angle
+				e.dx = math.Cos(angle)
+				e.dy = math.Sin(angle)
+			} else {
+				e.dx = (dx / length) * 2
+				e.dy = (dy / length) * 2
+				e.movementAngle = float64(math.Atan2(float64(dy), float64(dx)) * (180 / math.Pi))
+			}
+		}
+	}
+
+	if length < 50 {
+		e.intention = Attack
+	}
+	// Randomly change direction
+	n := rand.Intn(100)
+	if time.Since(e.lastIntentionChange) > e.thoughtSpeed {
+		switch {
+		case n > 40:
+			e.intention = Attack
+		case n > 15:
+			e.intention = Chase
 		default:
 			e.intention = Idle
-			angle := rand.Float64() * 2 * math.Pi
-			e.movementAngle = float32(angle)
-			e.dx = math.Cos(angle)
-			e.dy = math.Sin(angle)
 		}
 		e.lastIntentionChange = time.Now()
 	}
 
 	// Move the enemy
-	e.x += e.dx * 1 // Adjust speed as needed
-	e.y += e.dy * 1 // Adjust speed as needed
+	e.x += e.dx * e.movementSpeed // Adjust speed as needed
+	e.y += e.dy * e.movementSpeed // Adjust speed as needed
 
 	// Ensure the enemy stays within bounds
 	if e.x < 0 {
@@ -633,7 +657,7 @@ func (g *Game) handleGamepadInput() bool {
 			g.player.y += float64(dy * 2) // Convert dy to float64
 
 			// Calculate movement angle
-			movementAngle := float32(math.Atan2(float64(dy), float64(dx)) * (180 / math.Pi))
+			movementAngle := float64(math.Atan2(float64(dy), float64(dx)) * (180 / math.Pi))
 			g.player.movementAngle = movementAngle
 
 			g.player.attacking = ebiten.IsGamepadButtonPressed(id, ebiten.GamepadButton2) // X button
@@ -697,7 +721,7 @@ func (g *Game) Update() error {
 
 		// Calculate movement angle for sprite direction
 		if dx != 0 || dy != 0 {
-			g.player.movementAngle = float32(math.Atan2(dy, dx) * (180 / math.Pi))
+			g.player.movementAngle = float64(math.Atan2(dy, dx) * (180 / math.Pi))
 		}
 
 		// Handle shooting action with left mouse button
@@ -1180,11 +1204,11 @@ func (g *Game) resetGame() {
 	g.lastEnemySpawn = time.Now()
 }
 
-func calculateAngleToMouse(playerX, playerY float64) float32 {
+func calculateAngleToMouse(playerX, playerY float64) float64 {
 	mouseX, mouseY := ebiten.CursorPosition()
 	dx := float64(mouseX) - (playerX + 32) // +32 to aim from center of player
 	dy := float64(mouseY) - (playerY + 32)
-	return float32(math.Atan2(dy, dx) * (180 / math.Pi))
+	return float64(math.Atan2(dy, dx) * (180 / math.Pi))
 }
 
 // GetMaxScreenSize returns the maximum screen size for the primary monitor.
@@ -1234,7 +1258,6 @@ func main() {
 
 	ebiten.SetWindowSize(screenWidth, screenHeight)
 	ebiten.SetWindowTitle("Basic Game Menu")
-	ebiten.SetFullscreen(true)
 
 	log.Println("screenWidth", screenWidth, "screenHeight", screenHeight)
 
@@ -1283,7 +1306,11 @@ func main() {
 	game.addDebugLog("Game started")
 
 	for !(game.exit && game.inMainMenu) {
-		if err := ebiten.RunGame(game); err != nil {
+		if err := ebiten.RunGameWithOptions(game, &ebiten.RunGameOptions{
+			ScreenTransparent: true,
+			// InitUnfocused:     true,
+			// SkipTaskbar:       true,
+		}); err != nil {
 			log.Fatalf("Error running game: %v", err)
 		}
 
