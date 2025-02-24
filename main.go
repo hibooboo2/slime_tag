@@ -133,11 +133,18 @@ var _ ecs.Overlapper = &Enemy{}
 var _ ecs.Drawer = &Enemy{}
 
 func (e *Enemy) getRect() image.Rectangle {
-	hitBoxSize := 20
+	hitBoxSize := 24
 	return image.Rect(
 		int(e.x)+e.sprites.SpriteWidth/2-hitBoxSize/2, int(e.y)+e.sprites.SpriteWidth/2-hitBoxSize/2,
 		int(e.x)+e.sprites.SpriteWidth/2+hitBoxSize/2, int(e.y)+e.sprites.SpriteWidth/2+hitBoxSize/2,
 	)
+}
+
+// Overlaps reports whether r and s have a non-empty intersection.
+func Overlaps(r, s image.Rectangle) bool {
+	return !r.Empty() && !s.Empty() &&
+		r.Min.X <= s.Max.X && s.Min.X <= r.Max.X &&
+		r.Min.Y <= s.Max.Y && s.Min.Y <= r.Max.Y
 }
 
 func (e *Enemy) Overlaps(r image.Rectangle, game ecs.Game) bool {
@@ -148,7 +155,7 @@ func (e *Enemy) Overlaps(r image.Rectangle, game ecs.Game) bool {
 
 	if e.intention == Attack {
 		// Check for collision
-		if r.Overlaps(e.getRect()) {
+		if Overlaps(r, e.getRect()) {
 			// Damage the player
 			g.player.hpBar.AddHP(-10)
 			//play damage sound
@@ -199,7 +206,10 @@ func (e *Enemy) Draw(screen *ebiten.Image, game ecs.Game) {
 	isDone, subImage := sprite.GetCurrentSprite(g.frameCount, e.movementAngle)
 	if e.hpBar.currentHP <= 0 && isDone {
 		g.AddHeadStone(int(e.x), int(e.y))
-		e.shouldRemove = true // Keep this line to mark for removal
+		e.shouldRemove = true
+		if g.debugMode {
+			g.AddFloatingText(fmt.Sprintf("TS:%s MS:%0.2f", e.thoughtSpeed, e.movementSpeed), e.x, e.y, color.RGBA{255, 0, 0, 255}) // Red text for damage
+		}
 	}
 
 	screen.DrawImage(subImage, op)
@@ -224,7 +234,7 @@ func NewEnemy(slimeName string, startX, startY float64) *Enemy {
 		y:             startY,
 		sprites:       sprites.NewSlimeSpritePack(slimeName),
 		intention:     Idle,
-		thoughtSpeed:  time.Duration(rand.Intn(3000)+600) * time.Millisecond,
+		thoughtSpeed:  time.Duration(rand.Intn(3000))*time.Millisecond + time.Millisecond*800,
 		movementSpeed: (rand.Float64() * 1.8) + 3/4,
 		hpBar:         NewHPBar(100),
 	}
@@ -249,12 +259,7 @@ func (e *Enemy) RandomMovement(playerX, playerY float64) {
 			e.dy = (dy / length) * 2
 			e.movementAngle = float64(math.Atan2(float64(dy), float64(dx)) * (180 / math.Pi))
 		case Idle:
-			if length > 350 {
-				angle := rand.Float64() * 2 * math.Pi
-				e.movementAngle = angle
-				e.dx = math.Cos(angle)
-				e.dy = math.Sin(angle)
-			} else {
+			if length < 250 {
 				e.dx = (dx / length) * 2
 				e.dy = (dy / length) * 2
 				e.movementAngle = float64(math.Atan2(float64(dy), float64(dx)) * (180 / math.Pi))
@@ -272,6 +277,10 @@ func (e *Enemy) RandomMovement(playerX, playerY float64) {
 			e.intention = Chase
 		default:
 			e.intention = Idle
+			angle := rand.Float64() * 2 * math.Pi
+			e.movementAngle = angle
+			e.dx = math.Cos(angle)
+			e.dy = math.Sin(angle)
 		}
 		e.lastIntentionChange = time.Now()
 	}
@@ -285,13 +294,18 @@ func (e *Enemy) RandomMovement(playerX, playerY float64) {
 	}
 
 	chaseAdd := 1.0
-	if e.intention == Chase {
-		chaseAdd = 1.5
+	switch e.intention {
+	case Idle:
+		chaseAdd = 3.5
+	case Attack:
+		chaseAdd = 1.3
+	case Chase:
+		chaseAdd = 1.6
 	}
 
 	// Move the enemy
-	e.x += e.dx * e.movementSpeed * chaseAdd // Adjust speed as needed
-	e.y += e.dy * e.movementSpeed * chaseAdd // Adjust speed as needed
+	e.x += e.dx*e.movementSpeed*chaseAdd + 0.2 // Adjust speed as needed
+	e.y += e.dy*e.movementSpeed*chaseAdd + 0.2 // Adjust speed as needed
 
 	// Ensure the enemy stays within bounds
 	if e.x < 0 {
