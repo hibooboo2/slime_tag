@@ -154,6 +154,7 @@ func (e *Enemy) Overlaps(r image.Rectangle, game ecs.Game) bool {
 	}
 
 	if e.intention == Attack {
+		return false
 		// Check for collision
 		if Overlaps(r, e.getRect()) {
 			// Damage the player
@@ -1209,7 +1210,7 @@ func main() {
 
 	// Example of adding an enemy
 
-	for i := range 20 {
+	for i := range 2000 {
 		// Generate random positions for the enemies
 		x := rand.Intn(screenWidth / 2)  // Assuming the screen width is 1920
 		y := rand.Intn(screenHeight / 2) // Assuming the screen height is 1080
